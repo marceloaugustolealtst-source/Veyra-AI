@@ -34,14 +34,14 @@ export default function Home() {
         </nav>
         <div className="side-bottom">
           <div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><button type="button" disabled>Explore plans · Coming soon</button></div>
-          <div className="user"><span className="avatar">G</span><span>Guest workspace<small>Sign in to save your work</small></span></div>
+          <div className="user"><span className="avatar">G</span><span>Guest workspace<small><a href="/auth">Create an account to save your work</a></small></span></div>
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
           <div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div>
-          <div className="top-actions"><span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>0 credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
+          <div className="top-actions"><a className="account-link" href="/auth">Sign in / Create account</a><span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>0 credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
         </header>
 
         <section className="welcome">
