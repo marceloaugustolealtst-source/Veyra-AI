@@ -50,7 +50,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [callError, setCallError] = useState("");
   const [inCall, setInCall] = useState(false);
   const [obsOn, setObsOn] = useState(false);
-  const [obsMessage, setObsMessage] = useState("OBS output is not active.");\n  const [hasInvite, setHasInvite] = useState(false);
+  const [obsMessage, setObsMessage] = useState("OBS output is not active.");
+  const [hasInvite, setHasInvite] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -270,7 +271,15 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     setCameraError("");
   }
 
-  function stopObsOutput() {\n    obsStreamRef.current?.getTracks().forEach((track) => track.stop());\n    obsStreamRef.current = null;\n    if (obsVideoRef.current) obsVideoRef.current.srcObject = null;\n    setObsOn(false);\n    setObsMessage("OBS output is not active.");\n  }\n\n  async function startObsOutput() {
+  function stopObsOutput() {
+    obsStreamRef.current?.getTracks().forEach((track) => track.stop());
+    obsStreamRef.current = null;
+    if (obsVideoRef.current) obsVideoRef.current.srcObject = null;
+    setObsOn(false);
+    setObsMessage("OBS output is not active.");
+  }
+
+  async function startObsOutput() {
     const canvas = canvasRef.current;
     if (!canvas || typeof canvas.captureStream !== "function") {
       setObsMessage("Canvas streaming is not supported by this browser.");
