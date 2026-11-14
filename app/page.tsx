@@ -5,6 +5,7 @@ import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, Lay
 import { createClient } from "@/lib/supabase/client";
 
 type Mode = "image" | "video";
+type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl: string };
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("image");
@@ -14,6 +15,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [generatedImage, setGeneratedImage] = useState("");
+  const [creations, setCreations] = useState<Creation[]>([]);
   const [account, setAccount] = useState<{ email: string; name: string; credits: number } | null>(null);
 
   useEffect(() => {
@@ -28,6 +30,11 @@ export default function Home() {
       ]);
       if (!active) return;
       setAccount({ email: user.email ?? "", name: String(profile?.full_name ?? user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: Number(wallet?.balance ?? 0) });
+      const historyResponse = await fetch("/api/creations");
+      if (historyResponse.ok) {
+        const history = await historyResponse.json() as { creations?: Creation[] };
+        if (active) setCreations(history.creations ?? []);
+      }
     };
     void supabase.auth.getUser().then(({ data }) => loadAccount(data.user));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void loadAccount(session?.user ?? null); });
@@ -50,10 +57,11 @@ export default function Home() {
     setBusy(true);
     try {
       const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: prompt.trim(), quality, size }) });
-      const result = await response.json() as { error?: string; imageUrl?: string; creditsRemaining?: number };
+      const result = await response.json() as { error?: string; imageUrl?: string; generationId?: string; creditsRemaining?: number };
       if (!response.ok) throw new Error(result.error || "Image generation failed.");
       if (!result.imageUrl) throw new Error("The image was generated but no preview link was returned.");
       setGeneratedImage(result.imageUrl);
+      setCreations((current) => [{ id: result.generationId ?? crypto.randomUUID(), generationId: result.generationId ?? null, createdAt: new Date().toISOString(), imageUrl: result.imageUrl! }, ...current].slice(0, 18));
       setAccount((current) => current ? { ...current, credits: Number(result.creditsRemaining ?? current.credits) } : current);
       setMessage("Your image is ready and saved privately in My creations.");
     } catch (cause) {
@@ -87,7 +95,9 @@ export default function Home() {
           {generatedImage && <div className="generated-result"><img src={generatedImage} alt="Your AI-generated image"/><div><strong>Image created successfully</strong><span>Saved privately · Preview link expires in one hour</span><a href={generatedImage} target="_blank" rel="noreferrer">Open full image ↗</a></div></div>}
         </section>
         <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
-        <section id="creations"><div className="section-head"><h2>Discover what’s possible</h2><a href="#create">Start creating ↗</a></div><div className="gallery"><div className="gallery-card"><div className="gallery-art"/><div className="gallery-label">Cinematic portrait<small>Editorial · Photorealistic</small></div></div><div className="gallery-card"><div className="gallery-art"/><div className="gallery-label">Dreamlike fashion<small>Studio lighting · Creative</small></div></div><div className="gallery-card"><div className="gallery-art"/><div className="gallery-label">Beyond the horizon<small>Atmospheric · Cinematic</small></div></div></div></section>
+        <section id="creations"><div className="section-head"><h2>My creations</h2><a href="#create">Create another ↗</a></div>
+          {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.imageUrl} target="_blank" rel="noreferrer" key={creation.id}><img src={creation.imageUrl} alt="Saved AI creation"/><span>{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images you generate will appear here and stay saved to your private account.</span></div>}
+        </section>
         <footer className="footer-note"><span>© 2026 Veyra AI. Imagine it. Bring it to life.</span><span>Image generation is connected · Video tools are in preview</span></footer>
       </main>
     </div>
