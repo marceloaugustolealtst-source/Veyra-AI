@@ -151,7 +151,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
       const data = await response.json() as { error?: string; generationId?: string; creditsReserved?: number };
       if (!response.ok || !data.generationId) throw new Error(data.error || "The video task could not be started.");
       setStatus("Your video is processing. This can take several minutes.");
-      setMessage(`${data.creditsReserved ?? 0} credits reserved. They are returned automatically if the provider reports a failed generation.`);
+      setMessage(`${data.creditsReserved ?? 0} free credits reserved. They are returned automatically if the provider reports a failed generation.`);
 
       await monitorGeneration(data.generationId);
     } catch (cause) {
@@ -187,7 +187,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
             <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{Array.from({ length: 28 }, (_, index) => index + 3).map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
             <label>Aspect ratio<select value={ratio} onChange={(event) => setRatio(event.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></label>
           </div>
-          <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : `Create video · ${cost} credits`}</button>
+          <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : `Create video · ${cost} free credits`}</button>
           {status && <p className="generation-message" role="status">{status}</p>}
           {message && <p className="generation-message" role="status">{message}</p>}
         </div>
