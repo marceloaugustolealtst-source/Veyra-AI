@@ -146,7 +146,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
             <input type="file" accept={editing ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
           </label>}
           <div className="editor-selects">
-            <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{[3,5,8,10,15,20,25,30].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
+            <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{Array.from({ length: 28 }, (_, index) => index + 3).map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
             <label>Aspect ratio<select value={ratio} onChange={(event) => setRatio(event.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></label>
           </div>
           <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : `Create video · ${cost} credits`}</button>
