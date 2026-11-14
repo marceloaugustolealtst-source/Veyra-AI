@@ -45,8 +45,19 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (status === "PENDING" || status === "THROTTLED" || status === "RUNNING") return NextResponse.json({ status: "processing" });
     if (status === "FAILED" || status === "CANCELED" || status === "CANCELLED") {
       const reason = task.failure || task.error || "The video provider could not complete this generation.";
-      await admin.rpc("veyra_refund_video_generation", { p_user_id: user.id, p_generation_id: id, p_reason: reason.slice(0, 240) });
-      return NextResponse.json({ status: "failed", error: "Video generation failed. Your reserved credits have been returned." });
+      const { data: refundedBalance, error: refundError } = await admin.rpc("veyra_refund_video_generation", {
+        p_user_id: user.id, p_generation_id: id, p_reason: reason.slice(0, 240),
+      });
+      if (refundError) throw new Error("The video provider rejected this task and the credit refund needs attention. Please contact support.");
+      const providerQuotaError = /not enough credits|insufficient|quota|billing|out of credits/i.test(reason);
+      const errorMessage = providerQuotaError
+        ? "Your Veyra wallet has credits, but the connected video provider account has no available API quota. Your reserved Veyra credits have been returned."
+        : "Video generation failed. Your reserved Veyra credits have been returned.";
+      return NextResponse.json({
+        status: "failed",
+        error: errorMessage,
+        creditsRemaining: Number(refundedBalance ?? 0),
+      });
     }
     if (status !== "SUCCEEDED" || !task.output?.[0]) return NextResponse.json({ status: "processing" });
 
