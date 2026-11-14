@@ -131,11 +131,14 @@ export async function POST(request: Request) {
         p_reason: message.slice(0, 240),
       });
     }
-    const safeMessage = message.includes("SUPABASE_SECRET_KEY")
-      ? "Image generation needs its secure Supabase server key. Add SUPABASE_SECRET_KEY in Vercel."
-      : message.includes("OPENAI_API_KEY")
-        ? "Image generation needs an OpenAI API key in the Vercel server environment."
-        : message;
+    const providerQuotaError = /no credits remaining|insufficient_quota|billing|quota exceeded|out of credits/i.test(message);
+    const safeMessage = providerQuotaError
+      ? "Your Veyra wallet has credits, but the connected image provider account has no available API quota. Your reserved Veyra credits have been returned. Image generation will work again when an available provider quota is connected."
+      : message.includes("SUPABASE_SECRET_KEY")
+        ? "Image generation needs its secure Supabase server key. Add SUPABASE_SECRET_KEY in Vercel."
+        : message.includes("OPENAI_API_KEY")
+          ? "Image generation needs an OpenAI API key in the Vercel server environment."
+          : message;
     return NextResponse.json({ error: safeMessage }, { status: 500 });
   }
 }
