@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LifeBuoy, LockKeyhole, Plus, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
+import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
 
 type Mode = "image" | "video";
 
