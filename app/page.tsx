@@ -109,6 +109,18 @@ export default function Home() {
       setMessage("Your image is ready and saved privately in My creations.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Image generation failed. Please try again.");
+      try {
+        const walletResponse = await fetch("/api/account", { cache: "no-store" });
+        if (walletResponse.ok) {
+          const wallet = await walletResponse.json() as { email?: string; name?: string; credits?: number };
+          setAccount((current) => current ? {
+            ...current,
+            email: wallet.email ?? current.email,
+            name: wallet.name ?? current.name,
+            credits: Number(wallet.credits ?? 0),
+          } : current);
+        }
+      } catch { /* Keep the last confirmed wallet balance visible. */ }
     } finally {
       setBusy(false);
     }
@@ -126,6 +138,13 @@ export default function Home() {
         <div className="side-bottom"><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
       </aside>
       <main className="main">
+        <nav className="mobile-dock" aria-label="Mobile app navigation">
+          <a href="#create"><ImagePlus size={19}/><span>Create</span></a>
+          <a href="#photo-editor"><WandSparkles size={19}/><span>Edit</span></a>
+          <a href="#video-studio"><Film size={19}/><span>Video</span></a>
+          <a href="#creations"><Aperture size={19}/><span>Library</span></a>
+          <a href="#settings"><Settings2 size={19}/><span>Account</span></a>
+        </nav>
         <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><div className="notification-wrap">
             <button className={"icon-btn notification-button " + (notificationShake ? "notification-shake" : "")} aria-label={"Notifications, " + notifications.filter(item => !item.read_at).length + " unread"} aria-expanded={notificationsOpen} type="button" onClick={() => { setNotificationsOpen(open => !open); setNotificationShake(false); }}>
               <Bell size={16}/>{notifications.some(item => !item.read_at) && <span className="notification-dot" />}
