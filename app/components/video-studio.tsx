@@ -163,7 +163,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
   }
 
   const editing = mode === "video_edit";
-  const cost = duration * (editing ? 36 : 20);
+  const cost = Math.max(1, Math.ceil((duration * 10) / 30));
   return (
     <section className="video-studio" id="video-studio">
       <div className="section-head video-section-head">
@@ -195,7 +195,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
           {videoUrl ? <video src={videoUrl} controls playsInline /> : <div className="video-preview-empty">{busy ? <LoaderCircle size={28} className="video-spinner"/> : <Clapperboard size={30}/>}<strong>{busy ? "Creating your video" : "Your video preview"}</strong><span>{busy ? "Veyra is working on your creative direction." : "Your finished video will appear here."}</span></div>}
         </div>
       </div>
-      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> Powered by Runway. Initial models: Kling 4.0 for creation and Aleph 2.0 for video editing. Video credits are configurable in Vercel.</p>
+      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> Powered by Runway. Initial models: Kling 4.0 for creation and Aleph 2.0 for video editing. Video generation uses 10 free credits per 30 seconds.</p>
     </section>
   );
 }
