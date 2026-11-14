@@ -5,47 +5,67 @@ A premium creative studio for AI image generation, photo editing, and cinematic 
 ## Stack
 
 - Next.js App Router and TypeScript
-- React
-- CSS design system with a responsive dark studio interface
-- Planned integrations: Supabase Auth/Database/Storage and external image/video generation providers
+- React and a responsive dark studio CSS design system
+- Supabase Auth, Postgres, private Storage and row-level security
+- OpenAI Images API for server-side image generation
 
-## Getting started
+## Local setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000.
+Create `.env.local` from `.env.example`. Never commit real environment values.
 
-## Current status
+## Required environment variables
 
-The initial responsive workspace UI is in place. AI generation, authentication, billing, and persistence are not connected yet; generation controls are intentionally marked as coming soon until provider credentials and secure backend workflows are configured.
+- `NEXT_PUBLIC_SUPABASE_URL`: Veyra Supabase project URL.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Supabase publishable key; safe for browser use.
+- `SUPABASE_SECRET_KEY`: Supabase secret/service-role key; server only. Never prefix it with `NEXT_PUBLIC_`, expose it in client code, or commit it.
+- `OPENAI_API_KEY`: OpenAI API key; server only. Never expose it to the browser or commit it.
 
+Add all four variables to the Vercel project settings and redeploy. Image generation uses the OpenAI Images API with `gpt-image-2.5-flare`. Your OpenAI organization may need image-model access or organization verification.
 
-## Supabase setup
+## Image generation and credits
 
-Authentication is wired through Supabase Auth using cookie-based sessions with the official `@supabase/ssr` integration.
+The authenticated `POST /api/generate` route validates the request, reserves credits through a privileged database RPC, calls OpenAI from the server, stores the PNG in the private `veyra-user-media` bucket, records the media asset, and returns a one-hour signed preview URL. The provider key is never sent to the browser.
 
-1. Copy `.env.example` to `.env.local`.
-2. In the Veyra AI Supabase project, copy the Project URL and **publishable key** into the two environment variables.
-3. In Supabase Authentication URL Configuration, add your local URL (for example `http://localhost:3000/**`) and your deployed Veyra domain to the allowed redirect URLs.
-4. Enable email confirmation in Supabase Auth if you want new users to verify their email before signing in.
+Credit prices are fixed in both the API and database:
+- Draft / low: 8 credits
+- Standard / medium: 12 credits
+- High: 20 credits
 
-Never place a Supabase secret/service-role key in a `NEXT_PUBLIC_*` variable or in browser code.
+The database reserves credits atomically before calling the provider. Provider, upload, or finalization failures trigger an idempotent refund and a failed generation record. Users cannot directly change wallet balances or ledger rows.
 
-The account screens and session refresh are implemented. User profiles, credits, generation history, AI provider connections, and billing still need their database schema and server-side workflows.
+## Supabase migrations
 
+- `20261114153615_veyra_user_profiles_credits_media_foundation.sql`: user profiles, wallets, immutable credit ledger, generation history, private media bucket, subscriptions and RLS.
+- `20261114173000_veyra_secure_image_generation_credit_pipeline.sql`: service-role-only atomic reserve, complete and refund RPCs for image generation.
 
-## Database foundation
+Apply migrations to the Veyra project only. Do not apply them to Globalvest, International Banco, or UPC Tracker.
 
-The initial Supabase migration is in `supabase/migrations/20261114153615_veyra_user_profiles_credits_media_foundation.sql` and has been applied to the Veyra AI Supabase project. It creates profiles, credit wallets and ledger, generation jobs, private user media storage, and subscription records with row-level security. A database trigger creates a profile and zero-credit wallet whenever Supabase Auth creates a user.
+## Email verification codes
 
-## Deployment environment variables
+The registration page verifies email OTPs with `verifyOtp({ type: "signup" })`. In Supabase Dashboard → Authentication → Email Templates → Confirm signup, use the `{{ .Token }}` template variable in the email body (not only `{{ .ConfirmationURL }}`). Suggested subject: `Your Veyra AI verification code`. Example body:
 
-Set these in your Vercel project (and in `.env.local` for local development):
+```html
+<h2>Welcome to Veyra AI</h2>
+<p>Use this one-time code to verify your email address:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:8px">{{ .Token }}</p>
+<p>If you did not create a Veyra AI account, you can ignore this email.</p>
+```
 
-- `NEXT_PUBLIC_SUPABASE_URL` = your Veyra Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = your Supabase publishable key
+For production delivery, configure a trusted custom SMTP provider in Supabase Auth → SMTP Settings, set the Veyra site URL and allowed redirect URLs, and test delivery to an inbox you control. Supabase's default mail service is rate-limited.
 
-Do not commit real environment values or any Supabase secret/service-role key to this repository. In Supabase Auth URL Configuration, add the deployed Veyra domain to the allowed redirect URLs, including `/auth/callback`.
+## Security notes
+
+- Supabase secret and OpenAI API keys are server-only environment variables.
+- The generation credit RPCs revoke execution from anon/authenticated and grant it only to `service_role`.
+- Media is stored in a private bucket; preview URLs expire after one hour.
+- Do not grant users direct wallet or credit-ledger write permissions.
+- Generation prompts are subject to the provider's safety policies.
+
+## Current scope
+
+Text-to-image generation is connected once the required Vercel secrets are supplied. Reference-image editing, video generation/editing, subscriptions, payment processing, and admin tooling are not implemented yet.
