@@ -68,4 +68,4 @@ For production delivery, configure a trusted custom SMTP provider in Supabase Au
 
 ## Current scope
 
-Text-to-image generation is connected once the required Vercel secrets are supplied. Reference-image editing, video generation/editing, subscriptions, payment processing, and admin tooling are not implemented yet.
+Text-to-image generation is connected once the required Vercel secrets are supplied. AI photo editing is now connected through the authenticated `/api/edit` route and uses the same secure credit reservation, private storage, and refund flow as image generation. Reference editing accepts PNG/JPG/WebP uploads up to 4 MB through the Vercel function. Video generation/editing, subscriptions, payment processing, and admin tooling are not implemented yet.
