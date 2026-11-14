@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     if (!SIZES.includes(size as (typeof SIZES)[number])) {
       return NextResponse.json({ error: "Choose a supported image size." }, { status: 400 });
     }
-    if (!(quality in COSTS)) {
+    if (!Object.prototype.hasOwnProperty.call(COSTS, quality)) {
       return NextResponse.json({ error: "Choose low, medium, or high quality." }, { status: 400 });
     }
     if (!process.env.OPENAI_API_KEY) {
@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       }
       throw new Error("Could not reserve credits for this generation.");
     }
+    if (!reservedId) throw new Error("The credit reservation returned no generation ID.");
     generationId = String(reservedId);
 
     const providerResponse = await fetch("https://api.openai.com/v1/images/generations", {
