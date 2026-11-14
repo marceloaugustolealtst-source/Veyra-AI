@@ -53,12 +53,14 @@ export default function Home() {
     let active = true;
     const loadAccount = async (user: { id: string; email?: string; user_metadata?: { full_name?: string } } | null) => {
       if (!user) { if (active) setAccount(null); return; }
-      const [{ data: profile }, { data: wallet }] = await Promise.all([
-        supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-        supabase.from("credit_wallets").select("balance").eq("user_id", user.id).maybeSingle(),
-      ]);
+      const accountResponse = await fetch("/api/account", { cache: "no-store" });
+      if (!accountResponse.ok) {
+        if (active) setAccount({ email: user.email ?? "", name: String(user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: 0 });
+        return;
+      }
+      const accountData = await accountResponse.json() as { email?: string; name?: string; credits?: number };
       if (!active) return;
-      setAccount({ email: user.email ?? "", name: String(profile?.full_name ?? user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: Number(wallet?.balance ?? 0) });
+      setAccount({ email: accountData.email ?? user.email ?? "", name: accountData.name ?? user.email ?? "Your account", credits: Number(accountData.credits ?? 0) });
       const historyResponse = await fetch("/api/creations");
       if (historyResponse.ok) {
         const history = await historyResponse.json() as { creations?: Array<{ id: string; generationId: string | null; createdAt: string; mediaType: "image" | "video"; mediaUrl: string }> };
