@@ -77,7 +77,7 @@ export default function PhotoEditor({
       </div>
       <div className="editor-workspace">
         <label className="editor-upload">
-          {preview ? <img src={preview} alt="Selected image to edit"/> : <span className="editor-upload-empty"><ImagePlus size={25}/><strong>Choose an image</strong><small>PNG, JPG or WebP · Max 20 MB</small></span>}
+          {preview ? <img src={preview} alt="Selected image to edit"/> : <span className="editor-upload-empty"><ImagePlus size={25}/><strong>Choose an image</strong><small>PNG, JPG or WebP · Max 4 MB</small></span>}
           <span className="editor-upload-action"><Upload size={14}/> {file ? "Change image" : "Upload image"}</span>
           <input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectFile} hidden/>
         </label>
