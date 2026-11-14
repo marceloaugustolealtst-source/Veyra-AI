@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Aperture, Bell, Clapperboard, Compass, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
+import { Aperture, Bell, Clapperboard, Compass, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 const StudioLoader = () => <div className="studio-lazy-placeholder" aria-label="Loading creative studio"><span className="loading-orb" />Loading studio tools…</div>;
 const PhotoEditor = dynamic(() => import("@/app/components/photo-editor"), { loading: StudioLoader });
 const VideoStudio = dynamic(() => import("@/app/components/video-studio"), { loading: StudioLoader });
+const LiveCallStudio = dynamic(() => import("@/app/components/live-call-studio"), { loading: StudioLoader });
 
 type Mode = "image" | "video";
 type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl?: string; mediaUrl?: string; mediaType?: "image" | "video" };
@@ -119,7 +120,7 @@ export default function Home() {
       <aside className="sidebar">
         <a className="brand" href="#" aria-label="Veyra AI home"><span className="brand-mark">V</span><span><span className="brand-name">VEYRA AI</span><span className="brand-sub">CREATIVE STUDIO</span></span></a>
         <div className="nav-label">WORKSPACE</div>
-        <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#video-studio"><Film size={17}/><span>Video generator</span></a><a href="#video-studio"><Clapperboard size={17}/><span>Video editor</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
+        <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#video-studio"><Film size={17}/><span>Video generator</span></a><a href="#video-studio"><Clapperboard size={17}/><span>Video editor</span></a><a href="#live-call-studio"><Video size={17}/><span>Live call avatars</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
         <div className="nav-label">YOUR LIBRARY</div>
         <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><Zap size={17}/><span>Free credits</span></a><a href="#settings"><Settings2 size={17}/><span>Account settings</span></a></nav>
         <div className="side-bottom"><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
@@ -152,6 +153,7 @@ export default function Home() {
         </section>
         <PhotoEditor onCreated={(creation) => setCreations((current) => [creation, ...current].slice(0, 18))} onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} />
         <VideoStudio onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} onCreated={(creation) => setCreations((current) => [creation, ...current].slice(0, 30))} />
+        <LiveCallStudio signedIn={Boolean(account)} />
         <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
         <section id="creations"><div className="section-head"><h2>My creations</h2><a href="#create">Create another ↗</a></div>
           {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.mediaUrl ?? creation.imageUrl ?? "#"} target="_blank" rel="noreferrer" key={creation.id}>{creation.mediaType === "video" ? <video src={creation.mediaUrl} muted playsInline preload="metadata"/> : <img src={creation.mediaUrl ?? creation.imageUrl} alt="Saved AI creation"/>}<span>{creation.mediaType === "video" ? "VIDEO · " : ""}{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images and videos you create will appear here and stay saved to your private account.</span></div>}
