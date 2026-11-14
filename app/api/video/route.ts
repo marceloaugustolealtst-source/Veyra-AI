@@ -13,7 +13,7 @@ const EDIT_MODEL = "aleph2";
 const RATIOS: Record<string, string> = {
   landscape: "1280:720",
   portrait: "720:1280",
-  square: "1024:1024",
+  square: "960:960",
 };
 
 function creditsPerSecond(edit: boolean) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const ratio = typeof body.ratio === "string" ? body.ratio : "landscape";
     const mediaPath = typeof body.mediaPath === "string" ? body.mediaPath : "";
 
-    if (prompt.length < 3 || prompt.length > 20000) return NextResponse.json({ error: "Describe your video in 3 to 20,000 characters." }, { status: 400 });
+    if (prompt.length < 3 || prompt.length > 1000) return NextResponse.json({ error: "Describe your video in 3 to 1,000 characters." }, { status: 400 });
     if (!Number.isInteger(duration) || duration < 3 || duration > 30) return NextResponse.json({ error: "Choose a duration from 3 to 30 seconds." }, { status: 400 });
     if (!RATIOS[ratio]) return NextResponse.json({ error: "Choose landscape, portrait, or square format." }, { status: 400 });
     if (mode !== "text_to_video" && (!mediaPath || !mediaPath.startsWith(user.id + "/"))) {
