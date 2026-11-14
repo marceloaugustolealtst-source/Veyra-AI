@@ -389,7 +389,6 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }
 
   const ready = Boolean(photo && permission && cameraOn && signedIn);
-  const hasInvite = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("invite");
 
   return (
     <section className="live-call-studio" id="live-call-studio">
