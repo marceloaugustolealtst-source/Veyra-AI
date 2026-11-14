@@ -35,3 +35,17 @@ Authentication is wired through Supabase Auth using cookie-based sessions with t
 Never place a Supabase secret/service-role key in a `NEXT_PUBLIC_*` variable or in browser code.
 
 The account screens and session refresh are implemented. User profiles, credits, generation history, AI provider connections, and billing still need their database schema and server-side workflows.
+
+
+## Database foundation
+
+The initial Supabase migration is in `supabase/migrations/20261114153615_veyra_user_profiles_credits_media_foundation.sql` and has been applied to the Veyra AI Supabase project. It creates profiles, credit wallets and ledger, generation jobs, private user media storage, and subscription records with row-level security. A database trigger creates a profile and zero-credit wallet whenever Supabase Auth creates a user.
+
+## Deployment environment variables
+
+Set these in your Vercel project (and in `.env.local` for local development):
+
+- `NEXT_PUBLIC_SUPABASE_URL` = your Veyra Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = your Supabase publishable key
+
+Do not commit real environment values or any Supabase secret/service-role key to this repository. In Supabase Auth URL Configuration, add the deployed Veyra domain to the allowed redirect URLs, including `/auth/callback`.
