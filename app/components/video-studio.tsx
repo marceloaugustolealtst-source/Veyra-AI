@@ -115,7 +115,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
         }
         if (result.status === "failed" || result.status === "cancelled") throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
       }
-      setStatus("Your video is still processing. Your video is still processing. Keep this page open to continue checking its progress.");
+      setStatus("Your video is still processing. Keep this page open to continue checking its progress.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Video generation failed. Please try again.");
       setStatus("");
