@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type Mode = "image" | "video";
 
@@ -9,6 +10,27 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("image");
   const [prompt, setPrompt] = useState("");
   const [fileName, setFileName] = useState("");
+  const [account, setAccount] = useState<{ email: string; name: string } | null>(null);
+
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
+    const supabase = createClient();
+    void supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setAccount({ email: data.user.email ?? "", name: String(data.user.user_metadata?.full_name ?? data.user.email ?? "Your account") });
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      setAccount(user ? { email: user.email ?? "", name: String(user.user_metadata?.full_name ?? user.email ?? "Your account") } : null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleSignOut() {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setAccount(null);
+  }
 
   return (
     <div className="shell">
@@ -34,14 +56,14 @@ export default function Home() {
         </nav>
         <div className="side-bottom">
           <div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><button type="button" disabled>Explore plans · Coming soon</button></div>
-          <div className="user"><span className="avatar">G</span><span>Guest workspace<small><a href="/auth">Create an account to save your work</a></small></span></div>
+          <div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div>
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
           <div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div>
-          <div className="top-actions"><a className="account-link" href="/auth">Sign in / Create account</a><span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>0 credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
+          <div className="top-actions">{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>0 credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
         </header>
 
         <section className="welcome">
