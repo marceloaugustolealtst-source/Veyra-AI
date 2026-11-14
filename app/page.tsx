@@ -10,17 +10,28 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("image");
   const [prompt, setPrompt] = useState("");
   const [fileName, setFileName] = useState("");
-  const [account, setAccount] = useState<{ email: string; name: string } | null>(null);
+  const [account, setAccount] = useState<{ email: string; name: string; credits: number } | null>(null);
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
     const supabase = createClient();
-    void supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setAccount({ email: data.user.email ?? "", name: String(data.user.user_metadata?.full_name ?? data.user.email ?? "Your account") });
-    });
+    let active = true;
+    const loadAccount = async (user: { id: string; email?: string; user_metadata?: { full_name?: string } } | null) => {
+      if (!user) { if (active) setAccount(null); return; }
+      const [{ data: profile }, { data: wallet }] = await Promise.all([
+        supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+        supabase.from("credit_wallets").select("balance").eq("user_id", user.id).maybeSingle(),
+      ]);
+      if (!active) return;
+      setAccount({
+        email: user.email ?? "",
+        name: String(profile?.full_name ?? user.user_metadata?.full_name ?? user.email ?? "Your account"),
+        credits: Number(wallet?.balance ?? 0),
+      });
+    };
+    void supabase.auth.getUser().then(({ data }) => loadAccount(data.user));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user;
-      setAccount(user ? { email: user.email ?? "", name: String(user.user_metadata?.full_name ?? user.email ?? "Your account") } : null);
+      void loadAccount(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -63,7 +74,7 @@ export default function Home() {
       <main className="main">
         <header className="topbar">
           <div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div>
-          <div className="top-actions">{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>0 credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
+          <div className="top-actions">{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div>
         </header>
 
         <section className="welcome">
