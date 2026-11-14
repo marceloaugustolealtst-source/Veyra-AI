@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type VideoMode = "text_to_video" | "image_to_video" | "video_edit";
 
-export default function VideoStudio({ onCreditsChange }: { onCreditsChange: (credits: number) => void }) {
+export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsChange: (credits: number) => void; onCreated: (creation: { id: string; generationId: string | null; createdAt: string; mediaType: "video"; mediaUrl: string }) => void }) {
   const [mode, setMode] = useState<VideoMode>("text_to_video");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(5);
@@ -47,8 +47,8 @@ export default function VideoStudio({ onCreditsChange }: { onCreditsChange: (cre
     setStatus("");
     if (prompt.trim().length < 3) { setMessage("Describe the video or the edit you want."); return; }
     if (mode !== "text_to_video" && !file) { setMessage(mode === "video_edit" ? "Choose a source video first." : "Choose a starting image first."); return; }
-    if (file && mode === "video_edit" && (!["video/mp4", "video/webm", "video/quicktime"].includes(file.type) || file.size > 100 * 1024 * 1024)) {
-      setMessage("Choose an MP4, WebM or MOV video up to 100 MB."); return;
+    if (file && mode === "video_edit" && (!["video/mp4", "video/webm"].includes(file.type) || file.size > 100 * 1024 * 1024)) {
+      setMessage("Choose an MP4 or WebM video up to 100 MB."); return;
     }
     if (file && mode === "image_to_video" && (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024)) {
       setMessage("Choose a PNG, JPG or WebP image up to 20 MB."); return;
@@ -85,13 +85,14 @@ export default function VideoStudio({ onCreditsChange }: { onCreditsChange: (cre
         if (result.status === "succeeded" && result.videoUrl) {
           setVideoUrl(result.videoUrl);
           onCreditsChange(Number(result.creditsRemaining ?? 0));
+          onCreated({ id: data.generationId, generationId: data.generationId, createdAt: new Date().toISOString(), mediaType: "video", mediaUrl: result.videoUrl });
           setStatus("Your video is ready and saved to your private library.");
           setMessage("");
           return;
         }
         if (result.status === "failed" || result.status === "cancelled") throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
       }
-      setStatus("Your video is still processing. You can leave this page and check My creations later.");
+      setStatus("Your video is still processing. Keep this page open and check again shortly; the video is still processing.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Video generation failed. Please try again.");
       setStatus("");
@@ -118,7 +119,7 @@ export default function VideoStudio({ onCreditsChange }: { onCreditsChange: (cre
           <label className="editor-label" htmlFor="video-prompt">{editing ? "Describe your video edit" : "Describe your video"}</label>
           <textarea id="video-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={1000} placeholder={editing ? "e.g. Change the scene to a golden-hour beach while keeping the subject and camera movement…" : "e.g. A cinematic tracking shot of a futuristic city at dusk, glowing reflections, atmospheric camera movement…"}/>
           {mode !== "text_to_video" && <label className="video-upload">
-            {preview ? <img src={preview} alt="Video starting frame"/> : <span><Upload size={20}/><strong>{file ? file.name : editing ? "Upload a source video" : "Upload a starting image"}</strong><small>{editing ? "MP4, WebM or MOV · up to 100 MB · max 30 seconds" : "PNG, JPG or WebP · up to 20 MB"}</small></span>}
+            {preview ? <img src={preview} alt="Video starting frame"/> : <span><Upload size={20}/><strong>{file ? file.name : editing ? "Upload a source video" : "Upload a starting image"}</strong><small>{editing ? "MP4 or WebM · up to 100 MB · max 30 seconds" : "PNG, JPG or WebP · up to 20 MB"}</small></span>}
             <input type="file" accept={editing ? "video/mp4,video/webm,video/quicktime" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
           </label>}
           <div className="editor-selects">
