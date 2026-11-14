@@ -1,0 +1,29 @@
+{
+  "id": "/",
+  "name": "Veyra AI — Creative Studio",
+  "short_name": "Veyra AI",
+  "description": "Create AI images, edit photos and generate videos.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "background_color": "#08090d",
+  "theme_color": "#08090d",
+  "categories": [
+    "photo",
+    "video",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/veyra-app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
