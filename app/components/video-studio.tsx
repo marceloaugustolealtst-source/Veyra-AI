@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Clapperboard, Film, ImagePlus, LoaderCircle, Sparkles, Upload, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,6 +17,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
   const [message, setMessage] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [status, setStatus] = useState("");
+  const monitorLock = useRef(false);
 
   useEffect(() => {
     if (!file || mode === "video_edit") { setPreview(""); return; }
@@ -64,6 +65,58 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     }
   }
 
+  async function monitorGeneration(generationId: string) {
+    if (monitorLock.current) return;
+    monitorLock.current = true;
+    window.localStorage.setItem("veyra-active-video-task", generationId);
+    try {
+      while (true) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5000));
+        let poll: Response;
+        try {
+          poll = await fetch("/api/video/" + encodeURIComponent(generationId), { cache: "no-store" });
+        } catch {
+          setStatus("Connection interrupted. Veyra will keep checking this video automatically.");
+          continue;
+        }
+        if (poll.status >= 500 || poll.status === 429) {
+          setStatus("The video service is temporarily busy. Retrying automatically…");
+          continue;
+        }
+        const result = await poll.json() as { status?: string; videoUrl?: string; creditsRemaining?: number; error?: string };
+        if (!poll.ok) throw new Error(result.error || "Could not check your video progress.");
+        if (result.status === "succeeded" && result.videoUrl) {
+          window.localStorage.removeItem("veyra-active-video-task");
+          setVideoUrl(result.videoUrl);
+          onCreditsChange(Number(result.creditsRemaining ?? 0));
+          onCreated({ id: generationId, generationId, createdAt: new Date().toISOString(), mediaType: "video", mediaUrl: result.videoUrl });
+          setStatus("Your video is ready and saved to your private library.");
+          setMessage("");
+          return;
+        }
+        if (result.status === "failed" || result.status === "cancelled") {
+          window.localStorage.removeItem("veyra-active-video-task");
+          throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
+        }
+        setStatus("Your video is processing. Veyra will keep checking until it is ready.");
+      }
+    } finally {
+      monitorLock.current = false;
+    }
+  }
+
+  useEffect(() => {
+    const savedTaskId = window.localStorage.getItem("veyra-active-video-task");
+    if (!savedTaskId) return;
+    setBusy(true);
+    setStatus("Resuming your video generation…");
+    void monitorGeneration(savedTaskId).catch((cause) => {
+      window.localStorage.removeItem("veyra-active-video-task");
+      setMessage(cause instanceof Error ? cause.message : "Video generation could not be resumed.");
+      setStatus("");
+    }).finally(() => setBusy(false));
+  }, []);
+
   async function start() {
     setMessage("");
     setVideoUrl("");
@@ -100,22 +153,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
       setStatus("Your video is processing. This can take several minutes.");
       setMessage(`${data.creditsReserved ?? 0} credits reserved. They are returned automatically if the provider reports a failed generation.`);
 
-      for (let attempt = 0; attempt < 90; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        const poll = await fetch(`/api/video/${data.generationId}`, { cache: "no-store" });
-        const result = await poll.json() as { status?: string; videoUrl?: string; creditsRemaining?: number; error?: string };
-        if (!poll.ok) throw new Error(result.error || "Could not check your video progress.");
-        if (result.status === "succeeded" && result.videoUrl) {
-          setVideoUrl(result.videoUrl);
-          onCreditsChange(Number(result.creditsRemaining ?? 0));
-          onCreated({ id: data.generationId, generationId: data.generationId, createdAt: new Date().toISOString(), mediaType: "video", mediaUrl: result.videoUrl });
-          setStatus("Your video is ready and saved to your private library.");
-          setMessage("");
-          return;
-        }
-        if (result.status === "failed" || result.status === "cancelled") throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
-      }
-      setStatus("Your video is still processing. Keep this page open to continue checking its progress.");
+      await monitorGeneration(data.generationId);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Video generation failed. Please try again.");
       setStatus("");
