@@ -42,12 +42,12 @@ export default function AuthPage() {
           options: { data: { full_name: fullName.trim() } },
         });
         if (authError) throw authError;
-        if (data.session) {
+        if (data.session && data.user?.email_confirmed_at) {
           router.replace("/");
           router.refresh();
         } else {
           setAwaitingCode(true);
-          setNotice(`We sent a verification code to ${email.trim()}. Enter the code from that email to activate your account.`);
+          setNotice(`We sent a verification code to ${email.trim()}. Enter the code from that email to activate your account. Your account will not open until your email is verified.`);
         }
       } else {
         const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
