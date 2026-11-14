@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import PhotoEditor from "@/app/components/photo-editor";
+import VideoStudio from "@/app/components/video-studio";
 
 type Mode = "image" | "video";
 type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl: string };
@@ -52,7 +53,7 @@ export default function Home() {
   async function handleGenerate() {
     setMessage("");
     setGeneratedImage("");
-    if (mode !== "image") { setMessage("Video generation is being built separately and is not active yet."); return; }
+    if (mode !== "image") { document.getElementById("video-studio")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     if (!account) { setMessage("Please sign in or create an account before generating."); return; }
     if (prompt.trim().length < 3) { setMessage("Describe the image you want to create first."); return; }
     setBusy(true);
@@ -78,7 +79,7 @@ export default function Home() {
       <aside className="sidebar">
         <a className="brand" href="#" aria-label="Veyra AI home"><span className="brand-mark">V</span><span><span className="brand-name">VEYRA AI</span><span className="brand-sub">CREATIVE STUDIO</span></span></a>
         <div className="nav-label">WORKSPACE</div>
-        <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#create"><Film size={17}/><span>Video generator</span></a><a href="#create"><Clapperboard size={17}/><span>Video editor</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
+        <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#video-studio"><Film size={17}/><span>Video generator</span></a><a href="#video-studio"><Clapperboard size={17}/><span>Video editor</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
         <div className="nav-label">YOUR LIBRARY</div>
         <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><CreditCard size={17}/><span>Plans & credits</span></a><a href="#settings"><Settings2 size={17}/><span>Settings</span></a></nav>
         <div className="side-bottom"><div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><button type="button" disabled>Explore plans · Coming soon</button></div><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
@@ -96,9 +97,10 @@ export default function Home() {
           {generatedImage && <div className="generated-result"><img src={generatedImage} alt="Your AI-generated image"/><div><strong>Image created successfully</strong><span>Saved privately · Preview link expires in one hour</span><a href={generatedImage} target="_blank" rel="noreferrer">Open full image ↗</a></div></div>}
         </section>
         <PhotoEditor onCreated={(creation) => setCreations((current) => [creation, ...current].slice(0, 18))} onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} />
-        <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
+        <VideoStudio onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} />
+        <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
         <section id="creations"><div className="section-head"><h2>My creations</h2><a href="#create">Create another ↗</a></div>
-          {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.imageUrl} target="_blank" rel="noreferrer" key={creation.id}><img src={creation.imageUrl} alt="Saved AI creation"/><span>{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images you generate will appear here and stay saved to your private account.</span></div>}
+          {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.imageUrl} target="_blank" rel="noreferrer" key={creation.id}><img src={creation.imageUrl} alt="Saved AI creation"/><span>{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images and videos you create will appear here and stay saved to your private account.</span></div>}
         </section>
         <footer className="footer-note"><span>© 2026 Veyra AI. Imagine it. Bring it to life.</span><span>Image generation is connected · Video tools are in preview</span></footer>
       </main>
