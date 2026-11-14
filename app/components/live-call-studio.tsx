@@ -25,7 +25,6 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const drawFrameRef = useRef<number>(0);\n  const audioFrameRef = useRef<number>(0);
   const levelRef = useRef(0);
   const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1 });
-  const previousFrameRef = useRef<Uint8ClampedArray | null>(null);
   const photoUrlRef = useRef("");
 
   const stopMedia = useCallback(() => {
