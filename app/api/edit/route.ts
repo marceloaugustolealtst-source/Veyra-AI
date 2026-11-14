@@ -42,8 +42,8 @@ export async function POST(request: Request) {
     if (!Object.prototype.hasOwnProperty.call(COSTS, quality)) {
       return NextResponse.json({ error: "Choose low, medium, or high quality." }, { status: 400 });
     }
-    if (!(image instanceof File) || image.size === 0 || image.size > 20 * 1024 * 1024 || !MIME_TYPES.has(image.type)) {
-      return NextResponse.json({ error: "Upload a PNG, JPG, or WebP image smaller than 20 MB." }, { status: 400 });
+    if (!(image instanceof File) || image.size === 0 || image.size > 4 * 1024 * 1024 || !MIME_TYPES.has(image.type)) {
+      return NextResponse.json({ error: "Upload a PNG, JPG, or WebP image smaller than 4 MB." }, { status: 400 });
     }
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "Photo editing is not activated yet. Add OPENAI_API_KEY in your Vercel server environment." }, { status: 503 });
