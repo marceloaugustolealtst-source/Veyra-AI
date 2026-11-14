@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
+import { Aperture, Bell, Clapperboard, Compass, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 const StudioLoader = () => <div className="studio-lazy-placeholder" aria-label="Loading creative studio"><span className="loading-orb" />Loading studio tools…</div>;
 const PhotoEditor = dynamic(() => import("@/app/components/photo-editor"), { loading: StudioLoader });
@@ -119,8 +119,8 @@ export default function Home() {
         <div className="nav-label">WORKSPACE</div>
         <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#video-studio"><Film size={17}/><span>Video generator</span></a><a href="#video-studio"><Clapperboard size={17}/><span>Video editor</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
         <div className="nav-label">YOUR LIBRARY</div>
-        <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><CreditCard size={17}/><span>Plans & credits</span></a><a href="#settings"><Settings2 size={17}/><span>Account settings</span></a></nav>
-        <div className="side-bottom"><div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><a href="#plans">View credits and plans</a></div><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
+        <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><Zap size={17}/><span>Free credits</span></a><a href="#settings"><Settings2 size={17}/><span>Account settings</span></a></nav>
+        <div className="side-bottom"><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
       </aside>
       <main className="main">
         <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><div className="notification-wrap">
