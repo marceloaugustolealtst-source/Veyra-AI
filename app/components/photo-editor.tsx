@@ -62,6 +62,13 @@ export default function PhotoEditor({
       setMessage("Your edited image is ready and saved privately in My creations.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Photo editing failed. Please try again.");
+      try {
+        const walletResponse = await fetch("/api/account", { cache: "no-store" });
+        if (walletResponse.ok) {
+          const wallet = await walletResponse.json() as { credits?: number };
+          if (typeof wallet.credits === "number") onCreditsChange(wallet.credits);
+        }
+      } catch { /* Keep the last confirmed wallet balance visible. */ }
     } finally {
       setBusy(false);
     }
