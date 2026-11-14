@@ -156,7 +156,7 @@ export default function Home() {
         </section>
         <section id="plans" className="account-info-section">
           <div className="section-head"><h2>Free credits</h2></div>
-          <div className="account-info-card"><strong>{account ? account.credits.toLocaleString() : "Sign in"} credits available</strong><p>Veyra is free to use. Credits are free usage units for image generation, photo editing and video creation. No subscriptions, purchases or payment details are required.</p></div>
+          <div className="account-info-card"><strong>{account ? account.credits.toLocaleString() : "Sign in"} credits available</strong><p>Veyra is free to use. Every new account starts with 500 free credits. Credits are free usage units for image generation, photo editing and video creation. A 30-second video uses 10 credits. No subscriptions, purchases or payment details are required.</p></div>
         </section>
         <section id="settings" className="account-info-section">
           <div className="section-head"><h2>Account settings</h2></div>
