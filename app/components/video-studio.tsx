@@ -96,6 +96,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
         }
         if (result.status === "failed" || result.status === "cancelled") {
           window.localStorage.removeItem("veyra-active-video-task");
+          if (typeof result.creditsRemaining === "number") onCreditsChange(result.creditsRemaining);
           throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
         }
         setStatus("Your video is processing. Veyra will keep checking until it is ready.");
@@ -157,6 +158,13 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Video generation failed. Please try again.");
       setStatus("");
+      try {
+        const walletResponse = await fetch("/api/account", { cache: "no-store" });
+        if (walletResponse.ok) {
+          const wallet = await walletResponse.json() as { credits?: number };
+          if (typeof wallet.credits === "number") onCreditsChange(wallet.credits);
+        }
+      } catch { /* Keep the last confirmed wallet balance visible. */ }
     } finally {
       setBusy(false);
     }
