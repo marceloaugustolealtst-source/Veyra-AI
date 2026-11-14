@@ -74,6 +74,29 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!account) return;
+    const refreshWallet = async () => {
+      try {
+        const response = await fetch("/api/account", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { email?: string; name?: string; credits?: number };
+        setAccount((current) => current ? {
+          ...current,
+          email: data.email ?? current.email,
+          name: data.name ?? current.name,
+          credits: Number(data.credits ?? current.credits),
+        } : current);
+      } catch { /* Keep the last confirmed balance until the server responds. */ }
+    };
+    const timer = window.setInterval(() => { void refreshWallet(); }, 15000);
+    window.addEventListener("focus", refreshWallet);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshWallet);
+    };
+  }, [account?.email]);
+
+  useEffect(() => {
     if (!account) {
       setNotifications([]);
       latestNotificationId.current = null;
