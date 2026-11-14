@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, Mic, MicOff, MonitorUp, Radio, ScanFace, UserRound, Video, VideoOff, Volume2, Phone, PhoneOff, Link2 } from "lucide-react";
+import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, MonitorUp, Radio, ScanFace, UserRound, Video, VideoOff, Volume2, Phone, PhoneOff, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type AvatarMode = "full" | "half";
@@ -50,7 +50,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [callError, setCallError] = useState("");
   const [inCall, setInCall] = useState(false);
   const [obsOn, setObsOn] = useState(false);
-  const [obsMessage, setObsMessage] = useState("OBS output is not active.");
+  const [obsMessage, setObsMessage] = useState("OBS output is not active.");\n  const [hasInvite, setHasInvite] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -270,7 +270,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     setCameraError("");
   }
 
-  async function startObsOutput() {
+  function stopObsOutput() {\n    obsStreamRef.current?.getTracks().forEach((track) => track.stop());\n    obsStreamRef.current = null;\n    if (obsVideoRef.current) obsVideoRef.current.srcObject = null;\n    setObsOn(false);\n    setObsMessage("OBS output is not active.");\n  }\n\n  async function startObsOutput() {
     const canvas = canvasRef.current;
     if (!canvas || typeof canvas.captureStream !== "function") {
       setObsMessage("Canvas streaming is not supported by this browser.");
@@ -415,7 +415,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           </div>
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Video size={13}/> Other participant</span><b>{inCall ? callStatus.toUpperCase() : "NOT CONNECTED"}</b></div><video ref={remoteVideoRef} autoPlay playsInline/><div className="camera-preview-empty"><span>{inCall ? callStatus : "The other participant appears here after they join."}</span></div></div>
           {callError && <p className="live-call-error" role="alert">{callError}</p>}
-          <div className="live-call-block"><label className="live-call-label">OBS / streaming output</label><div className="camera-permission-row"><span className="camera-icon"><MonitorUp size={18}/></span><span><strong>Canvas capture stream</strong><small>30 FPS browser stream for OBS capture.</small></span><button type="button" className={obsOn ? "camera-toggle on" : "camera-toggle"} onClick={() => obsOn ? stopMedia() : void startObsOutput()}>{obsOn ? "Stop" : "Start"}</button></div><video ref={obsVideoRef} muted playsInline autoPlay style={{width:"100%",maxHeight:100,background:"#080a10",borderRadius:8}}/><p className="live-call-hint">{obsMessage}</p></div>
+          <div className="live-call-block"><label className="live-call-label">OBS / streaming output</label><div className="camera-permission-row"><span className="camera-icon"><MonitorUp size={18}/></span><span><strong>Canvas capture stream</strong><small>30 FPS browser stream for OBS capture.</small></span><button type="button" className={obsOn ? "camera-toggle on" : "camera-toggle"} onClick={() => obsOn ? stopObsOutput() : void startObsOutput()}>{obsOn ? "Stop" : "Start"}</button></div><video ref={obsVideoRef} muted playsInline autoPlay style={{width:"100%",maxHeight:100,background:"#080a10",borderRadius:8}}/><p className="live-call-hint">{obsMessage}</p></div>
         </div>
       </div>
       <div className="live-call-footnote">Calls use encrypted WebRTC media and private Supabase Realtime signalling. Invite links are single-guest bearer links that expire after 24 hours; both people must sign in. STUN is configured; some restrictive networks require a TURN relay, which has not been configured. OBS virtual-camera drivers cannot be installed by a website: use OBS Browser Source or Window Capture, then enable OBS Virtual Camera in the OBS desktop app.</div>
