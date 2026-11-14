@@ -22,13 +22,15 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const drawFrameRef = useRef<number>(0);\n  const audioFrameRef = useRef<number>(0);
+  const drawFrameRef = useRef<number>(0);
+  const audioFrameRef = useRef<number>(0);
   const levelRef = useRef(0);
   const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1 });
   const photoUrlRef = useRef("");
 
   const stopMedia = useCallback(() => {
-    cancelAnimationFrame(drawFrameRef.current);\n    cancelAnimationFrame(audioFrameRef.current);
+    cancelAnimationFrame(drawFrameRef.current);
+    cancelAnimationFrame(audioFrameRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     audioContextRef.current?.close().catch(() => undefined);
