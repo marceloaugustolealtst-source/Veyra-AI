@@ -14,8 +14,9 @@ type FaceMeshInstance = {
   close(): void;
 };
 type FaceMeshConstructor = new (options: { locateFile: (file: string) => string }) => FaceMeshInstance;
+type SpeechRecognitionInstance = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void; stop(): void; };
 
-declare global { interface Window { FaceMesh?: FaceMeshConstructor } }
+declare global { interface Window { FaceMesh?: FaceMeshConstructor; SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance } }
 
 let faceMeshLoader: Promise<void> | null = null;
 function loadFaceMesh() {
@@ -75,13 +76,23 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const inviteTokenRef = useRef("");
   const obsStreamRef = useRef<MediaStream | null>(null);
   const signalQueueRef = useRef<Array<{ kind: string; data?: RTCSessionDescriptionInit | RTCIceCandidateInit }>>([]);
+  const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
+  const faceBusyRef = useRef(false);
+  const faceDetectedRef = useRef(false);
+  const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const speechActiveRef = useRef(false);
+  const speechMouthRef = useRef({ open: 0, width: 1 });
 
   const sendSignal = useCallback(async (kind: string, data?: RTCSessionDescriptionInit | RTCIceCandidateInit) => {
     const channel = channelRef.current;
     if (channel) await channel.send({ type: "broadcast", event: "signal", payload: { kind, data } });
   }, []);
 
-  const closeCall = useCallback(async () => {
+  const closeCall = useCallback(async (markEnded = false) => {
+    const roomId = roomIdRef.current;
+    if (markEnded && roomId) {
+      try { await fetch("/api/calls/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId }) }); } catch { /* Always complete local teardown. */ }
+    }
     peerRef.current?.close();
     peerRef.current = null;
     remoteStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -93,6 +104,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       channelRef.current = null;
     }
     roomIdRef.current = "";
+    pendingIceRef.current = [];
+    signalQueueRef.current = [];
+    hostRef.current = false;
     setInCall(false);
     setCallStatus("Call ended");
   }, []);
@@ -101,6 +115,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     cancelAnimationFrame(drawFrameRef.current);
     cancelAnimationFrame(audioFrameRef.current);
     cancelAnimationFrame(faceFrameRef.current);
+    speechActiveRef.current = false;
+    speechRecognitionRef.current?.stop();
+    speechRecognitionRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     audioContextRef.current?.close().catch(() => undefined);
@@ -121,7 +138,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
 
   useEffect(() => () => {
     stopMedia();
-    void closeCall();
+    void closeCall(true);
     if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
   }, [stopMedia, closeCall]);
 
@@ -150,12 +167,13 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       ctx.translate(width / 2 + motion.x, height / 2 + motion.y);
       ctx.rotate(motion.tilt);
       ctx.drawImage(image, -w / 2, -h / 2, w, h);
-      const mouth = Math.max(motion.mouth, Math.min(1, levelRef.current * 2.4));
-      if (mouth > 0.08) {
+      const speech = speechMouthRef.current;
+      const mouth = Math.max(motion.mouth * 0.72, Math.min(1, levelRef.current * 1.8), speech.open);
+      if (mouth > 0.07) {
         const mouthY = h * (mode === "full" ? 0.245 : 0.315);
         ctx.fillStyle = "#35131c";
         ctx.beginPath();
-        ctx.ellipse(0, -h / 2 + mouthY, Math.max(7, w * 0.018), 2 + mouth * 16, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, -h / 2 + mouthY, Math.max(6, w * 0.018) * speech.width, 1.5 + mouth * 13, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -203,7 +221,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           let sum = 0;
           for (const sample of samples) { const value = (sample - 128) / 128; sum += value * value; }
           const rms = Math.sqrt(sum / samples.length);
-          const level = Math.max(0, (rms - 0.012) * 4.2);
+          const level = Math.max(0, (rms - 0.018) * 3.2);
           levelRef.current = level;
           setMicLevel(Math.min(100, Math.round(level * 100)));
           audioFrameRef.current = requestAnimationFrame(analyse);
@@ -214,6 +232,23 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       }
       setCameraOn(true);
       setStage("preview");
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (Recognition) {
+        const recognition = new Recognition();
+        recognition.continuous = true; recognition.interimResults = true; recognition.lang = navigator.language || "en-US";
+        recognition.onresult = (event) => {
+          const transcript = event.results[event.results.length - 1]?.[0]?.transcript?.toLowerCase() ?? "";
+          const vowel = transcript.match(/[aeiouy]/g)?.slice(-1)[0];
+          speechMouthRef.current = vowel === "a" ? { open: 0.9, width: 1.18 }
+            : vowel === "o" || vowel === "u" ? { open: 0.68, width: 0.72 }
+            : vowel === "e" || vowel === "i" || vowel === "y" ? { open: 0.36, width: 0.9 }
+            : { open: 0.16, width: 1 };
+        };
+        recognition.onerror = () => { speechMouthRef.current = { open: 0, width: 1 }; };
+        recognition.onend = () => { if (speechActiveRef.current && streamRef.current) { try { recognition.start(); } catch { /* Already restarting. */ } } };
+        speechRecognitionRef.current = recognition; speechActiveRef.current = true;
+        try { recognition.start(); } catch { /* Speech recognition is optional. */ }
+      }
       setCallError("");
       setCameraError("Loading face tracking model…");
       await loadFaceMesh();
@@ -226,28 +261,45 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         if (!points) { setTracking(false); return; }
         const leftEye = points[33], rightEye = points[263], nose = points[1], forehead = points[10], chin = points[152];
         const mouthTop = points[13], mouthBottom = points[14], mouthLeft = points[61], mouthRight = points[291];
-        const faceWidth = Math.max(0.001, Math.abs(rightEye.x - leftEye.x));
         const eyeCenterX = (leftEye.x + rightEye.x) / 2;
         const eyeCenterY = (leftEye.y + rightEye.y) / 2;
         const tilt = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
         const faceHeight = Math.max(0.001, Math.abs(chin.y - forehead.y));
-        const mouthRatio = Math.min(1, Math.max(0, Math.abs(mouthBottom.y - mouthTop.y) / Math.max(0.001, Math.abs(mouthRight.x - mouthLeft.x)) * 3.2));
-        motionRef.current = {
-          x: Math.max(-95, Math.min(95, (0.5 - eyeCenterX) * 190)),
-          y: Math.max(-85, Math.min(85, (0.43 - eyeCenterY) * 150)),
-          tilt: Math.max(-0.38, Math.min(0.38, tilt)),
-          scale: Math.max(0.82, Math.min(1.2, 0.86 + faceHeight * 0.75)),
+        const mouthRatio = Math.min(1, Math.max(0, Math.abs(mouthBottom.y - mouthTop.y) / Math.max(0.001, Math.abs(mouthRight.x - mouthLeft.x)) * 2.7));
+        const target = {
+          x: Math.max(-48, Math.min(48, (0.5 - eyeCenterX) * 105)),
+          y: Math.max(-38, Math.min(38, (0.43 - eyeCenterY) * 82)),
+          tilt: Math.max(-0.2, Math.min(0.2, tilt)),
+          scale: Math.max(0.94, Math.min(1.07, 0.98 + (faceHeight - 0.36) * 0.32)),
           mouth: mouthRatio,
         };
+        const current = motionRef.current;
+        const smooth = (from: number, to: number, factor: number, deadzone = 0.002) => {
+          const delta = to - from;
+          return Math.abs(delta) < deadzone ? from : from + delta * factor;
+        };
+        motionRef.current = {
+          x: smooth(current.x, target.x, 0.13, 0.6), y: smooth(current.y, target.y, 0.13, 0.6),
+          tilt: smooth(current.tilt, target.tilt, 0.12), scale: smooth(current.scale, target.scale, 0.10, 0.0015),
+          mouth: smooth(current.mouth, target.mouth, 0.28, 0.008),
+        };
+        faceDetectedRef.current = true;
         void nose;
         setTracking(true);
       });
       faceMeshRef.current = faceMesh;
       const detect = async () => {
         const video = videoRef.current;
-        if (video && video.readyState >= 2 && faceMeshRef.current) {
+        if (!faceBusyRef.current && video && video.readyState >= 2 && faceMeshRef.current) {
+          faceBusyRef.current = true;
           try { await faceMeshRef.current.send({ image: video }); } catch { /* A dropped frame is harmless. */ }
+          finally { faceBusyRef.current = false; }
+        } else if (!faceDetectedRef.current) {
+          const current = motionRef.current;
+          current.x *= 0.94; current.y *= 0.94; current.tilt *= 0.94;
+          current.scale += (1 - current.scale) * 0.06; current.mouth *= 0.8;
         }
+        faceDetectedRef.current = false;
         faceFrameRef.current = requestAnimationFrame(detect);
       };
       faceFrameRef.current = requestAnimationFrame(detect);
@@ -314,15 +366,19 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         setCallStatus("Calling invitee…");
       } else if (signal.kind === "offer" && !hostRef.current && peer && signal.data) {
         await peer.setRemoteDescription(signal.data as RTCSessionDescriptionInit);
+        for (const candidate of pendingIceRef.current.splice(0)) { try { await peer.addIceCandidate(candidate); } catch { /* Stale candidate. */ } }
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
         await sendSignal("answer", answer);
         setCallStatus("Connecting call…");
       } else if (signal.kind === "answer" && hostRef.current && peer && signal.data) {
         await peer.setRemoteDescription(signal.data as RTCSessionDescriptionInit);
+        for (const candidate of pendingIceRef.current.splice(0)) { try { await peer.addIceCandidate(candidate); } catch { /* Stale candidate. */ } }
         setCallStatus("Call connected");
       } else if (signal.kind === "ice" && peer && signal.data) {
-        try { await peer.addIceCandidate(signal.data as RTCIceCandidateInit); } catch { /* Candidate may arrive before remote SDP. */ }
+        const candidate = signal.data as RTCIceCandidateInit;
+        if (!peer.remoteDescription) pendingIceRef.current.push(candidate);
+        else { try { await peer.addIceCandidate(candidate); } catch { /* Ignore stale ICE candidates. */ } }
       } else if (signal.kind === "hangup") {
         await closeCall();
       }
@@ -333,7 +389,12 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") reject(error ?? new Error("Could not connect to the call signalling channel."));
       });
     });
-    const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }] });
+    let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];
+    try {
+      const configResponse = await fetch("/api/calls/ice-config", { cache: "no-store" });
+      if (configResponse.ok) { const config = await configResponse.json() as { iceServers?: RTCIceServer[] }; if (Array.isArray(config.iceServers) && config.iceServers.length) iceServers = config.iceServers; }
+    } catch { /* STUN remains as fallback until TURN is configured. */ }
+    const peer = new RTCPeerConnection({ iceServers });
     peerRef.current = peer;
     remoteStreamRef.current = new MediaStream();
     peer.ontrack = (event) => {
@@ -385,7 +446,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
 
   async function endCall() {
     await sendSignal("hangup");
-    await closeCall();
+    await closeCall(true);
   }
 
   const ready = Boolean(photo && permission && cameraOn && signedIn);
