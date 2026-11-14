@@ -16,10 +16,7 @@ const RATIOS: Record<string, string> = {
   square: "960:960",
 };
 
-function creditsPerSecond(edit: boolean) {
-  const raw = Number(edit ? process.env.VEYRA_VIDEO_EDIT_CREDITS_PER_SECOND : process.env.VEYRA_VIDEO_CREDITS_PER_SECOND);
-  return Number.isFinite(raw) && raw >= 1 && raw <= 1000 ? Math.ceil(raw) : edit ? 36 : 20;
-}
+const VIDEO_CREDITS_PER_30_SECONDS = 10;
 
 export async function POST(request: Request) {
   let userId: string | null = null;
@@ -59,7 +56,7 @@ export async function POST(request: Request) {
 
     const edit = mode === "video_edit";
     const model = edit ? EDIT_MODEL : MODEL;
-    const cost = creditsPerSecond(edit) * duration;
+    const cost = Math.max(1, Math.ceil((duration * VIDEO_CREDITS_PER_30_SECONDS) / 30));
     const dbMode = edit ? "video_edit" : "video";
     const { data: reservedId, error: reserveError } = await admin.rpc("veyra_reserve_video_generation", {
       p_user_id: user.id, p_prompt: prompt, p_mode: dbMode, p_model: model, p_duration: duration, p_cost: cost,
@@ -90,7 +87,7 @@ export async function POST(request: Request) {
 
     const { error: updateError } = await admin.from("generations").update({
       provider_job_id: data.id,
-      settings: { model, duration, ratio: RATIOS[ratio], mode, estimatedProviderCredits: data.estimatedCost?.credits ?? null, creditsPerSecond: creditsPerSecond(edit) },
+      settings: { model, duration, ratio: RATIOS[ratio], mode, estimatedProviderCredits: data.estimatedCost?.credits ?? null, creditsPer30Seconds: VIDEO_CREDITS_PER_30_SECONDS },
     }).eq("id", generationId).eq("user_id", user.id);
     if (updateError) {
       await fetch(`${RUNWAY}/tasks/${data.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${process.env.RUNWAYML_API_SECRET}`, "X-Runway-Version": VERSION } }).catch(() => undefined);
