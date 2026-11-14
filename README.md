@@ -41,7 +41,7 @@ The database reserves credits atomically before calling the provider. Provider, 
 ## Supabase migrations
 
 - `20261114153615_veyra_user_profiles_credits_media_foundation.sql`: user profiles, wallets, immutable credit ledger, generation history, private media bucket, subscriptions and RLS.
-- `20261114173000_veyra_secure_image_generation_credit_pipeline.sql`: service-role-only atomic reserve, complete and refund RPCs for image generation.
+- `20261114163118_veyra_secure_image_generation_credit_pipeline.sql`: service-role-only atomic reserve, complete and refund RPCs for image generation.
 
 Apply migrations to the Veyra project only. Do not apply them to Globalvest, International Banco, or UPC Tracker.
 
