@@ -28,3 +28,19 @@
 
 .saved-creations{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.saved-creation{position:relative;overflow:hidden;display:block;min-height:170px;border:1px solid var(--line);border-radius:13px;background:#0b0c13}.saved-creation img{display:block;width:100%;height:230px;object-fit:cover;transition:transform .25s}.saved-creation:hover img{transform:scale(1.025)}.saved-creation span{position:absolute;bottom:0;left:0;right:0;padding:20px 11px 9px;background:linear-gradient(transparent,#08090de8);font-size:10px;color:#ddd}.empty-creations{display:grid;justify-items:center;gap:9px;padding:36px 18px;border:1px dashed #ffffff20;border-radius:14px;background:#101117;color:#bcaaff;text-align:center}.empty-creations strong{font:600 14px 'Space Grotesk';color:#e7e3f2}.empty-creations span{font-size:11px;color:#9295a5;max-width:340px;line-height:1.5}
 @media(max-width:720px){.saved-creations{grid-template-columns:repeat(2,minmax(0,1fr))}.saved-creation img{height:180px}}
+
+
+/* AI photo editor */
+.photo-editor{margin-top:34px;border:1px solid #9c82ee35;border-radius:18px;padding:22px;background:linear-gradient(135deg,#151521,#10131b)}
+.editor-section-head{margin:0 0 18px}.editor-section-head>div p{margin:6px 0 0;color:#999bad;font-size:12px}.editor-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #a78bfa44;border-radius:30px;color:#c6b3ff;font-size:9px;letter-spacing:1.3px}
+.editor-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1fr);gap:18px}
+.editor-upload{min-height:290px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px dashed #a78bfa55;border-radius:13px;background:#0b0d15;cursor:pointer}
+.editor-upload>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#08090d}
+.editor-upload-empty{display:grid;justify-items:center;gap:9px;color:#bcaaff}.editor-upload-empty strong{font:600 14px 'Space Grotesk';color:#e9e4f7}.editor-upload-empty small{font-size:10px;color:#85899b}
+.editor-upload-action{position:absolute;left:12px;bottom:12px;display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid #ffffff24;border-radius:8px;background:#11131be8;color:#e8e2ff;font-size:11px}
+.editor-controls{display:grid;align-content:start;gap:12px}.editor-label{font-size:11px;color:#d4d0e0}
+.editor-controls>textarea{width:100%;min-height:145px;resize:vertical;padding:13px;border:1px solid #ffffff1c;border-radius:10px;background:#0b0d15;color:#f4f1ff;font:13px/1.6 'DM Sans';outline:none}
+.editor-controls>textarea:focus{border-color:#a78bfa88}.editor-controls>textarea::placeholder{color:#707486}
+.editor-selects{display:grid;grid-template-columns:1fr 1fr;gap:10px}.editor-selects label{display:grid;gap:7px;color:#aeb0c0;font-size:10px}.editor-selects select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:#151720;color:#dedce8;font-size:11px}
+.editor-generate{display:flex;justify-content:center;align-items:center;gap:8px;cursor:pointer}.editor-result-link{font-size:11px;color:#c7b4ff}
+@media(max-width:720px){.photo-editor{padding:16px}.editor-workspace{grid-template-columns:1fr}.editor-upload{min-height:230px}.editor-section-head{align-items:flex-start;gap:10px}.editor-selects{grid-template-columns:1fr 1fr}}
