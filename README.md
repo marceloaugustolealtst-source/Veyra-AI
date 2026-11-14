@@ -7,7 +7,8 @@ A premium creative studio for AI image generation, photo editing, and cinematic 
 - Next.js App Router and TypeScript
 - React and a responsive dark studio CSS design system
 - Supabase Auth, Postgres, private Storage and row-level security
-- OpenAI Images API for server-side image generation
+- OpenAI Images API for server-side image generation and editing
+- Runway Dev API for text-to-video, image-to-video, and video-to-video editing
 
 ## Local setup
 
@@ -24,8 +25,11 @@ Create `.env.local` from `.env.example`. Never commit real environment values.
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Supabase publishable key; safe for browser use.
 - `SUPABASE_SECRET_KEY`: Supabase secret/service-role key; server only. Never prefix it with `NEXT_PUBLIC_`, expose it in client code, or commit it.
 - `OPENAI_API_KEY`: OpenAI API key; server only. Never expose it to the browser or commit it.
+- `RUNWAYML_API_SECRET`: Runway Dev API key; server only. Never expose it to the browser or commit it.
+- `VEYRA_VIDEO_CREDITS_PER_SECOND`: optional Veyra credit price per generated second (defaults to 20).
+- `VEYRA_VIDEO_EDIT_CREDITS_PER_SECOND`: optional Veyra credit price per edited second (defaults to 36).
 
-Add all four variables to the Vercel project settings and redeploy. Image generation uses the OpenAI Images API with `gpt-image-2.5-flare`. Your OpenAI organization may need image-model access or organization verification.
+Add the four required variables plus the Runway key to the Vercel project settings and redeploy. The two video credit settings are optional. Image generation uses the OpenAI Images API with `gpt-image-2.5-flare`. Your OpenAI organization may need image-model access or organization verification.
 
 ## Image generation and credits
 
@@ -42,10 +46,11 @@ The database reserves credits atomically before calling the provider. Provider, 
 
 - `20261114153615_veyra_user_profiles_credits_media_foundation.sql`: user profiles, wallets, immutable credit ledger, generation history, private media bucket, subscriptions and RLS.
 - `20261114163118_veyra_secure_image_generation_credit_pipeline.sql`: service-role-only atomic reserve, complete and refund RPCs for image generation.
+- `20261114180000_veyra_video_generation_credit_pipeline.sql`: service-role-only atomic reserve, complete and refund RPCs for video generation and editing.
 
 Apply migrations to the Veyra project only. Do not apply them to Globalvest, International Banco, or UPC Tracker.
 
-## Email verification codes
+## Video generation and editing\n\nThe authenticated `POST /api/video` route submits text-to-video and image-to-video jobs to Runway Kling 4.0, or source-video edits to Aleph 2.0. Jobs are asynchronous; `GET /api/video/:id` checks provider status, downloads completed output, saves the MP4 in the private Supabase bucket, settles the credit reservation, and returns a one-hour signed preview URL. The dashboard supports text prompts, image references, video edits, aspect ratios, and 3–30 second durations. Video-edit duration is read from the uploaded clip and clips must be 3–30 seconds. Uploads are limited to MP4/WebM video up to 100 MB and PNG/JPG/WebP images up to 20 MB.\n\nDefault Veyra credit rates are 20 credits per generated second and 36 credits per edited second. Configure them with the optional environment variables above. These are Veyra app credit prices, not Runway's provider charges; maintain enough Runway API balance separately. Runway's output URLs are temporary, so Veyra copies finished MP4 files into private storage before presenting them.\n\n## Email verification codes
 
 The registration page verifies email OTPs with `verifyOtp({ type: "signup" })`. In Supabase Dashboard → Authentication → Email Templates → Confirm signup, use the `{{ .Token }}` template variable in the email body (not only `{{ .ConfirmationURL }}`). Suggested subject: `Your Veyra AI verification code`. Example body:
 
@@ -68,4 +73,4 @@ For production delivery, configure a trusted custom SMTP provider in Supabase Au
 
 ## Current scope
 
-Text-to-image generation is connected once the required Vercel secrets are supplied. AI photo editing is now connected through the authenticated `/api/edit` route and uses the same secure credit reservation, private storage, and refund flow as image generation. Reference editing accepts PNG/JPG/WebP uploads up to 4 MB through the Vercel function. Video generation/editing, subscriptions, payment processing, and admin tooling are not implemented yet.
+Text-to-image generation, AI photo editing, Runway text/image-to-video generation, and Runway source-video editing are implemented. They require the respective server-side API keys and a redeployment. Subscriptions, payment processing, and admin tooling are not implemented yet.
