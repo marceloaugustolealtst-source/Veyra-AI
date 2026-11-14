@@ -78,7 +78,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const signalQueueRef = useRef<Array<{ kind: string; data?: RTCSessionDescriptionInit | RTCIceCandidateInit }>>([]);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const faceBusyRef = useRef(false);
-  const faceDetectedRef = useRef(false);
+  const lastFaceAtRef = useRef(0);
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const speechActiveRef = useRef(false);
   const speechMouthRef = useRef({ open: 0, width: 1 });
@@ -223,6 +223,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           const rms = Math.sqrt(sum / samples.length);
           const level = Math.max(0, (rms - 0.018) * 3.2);
           levelRef.current = level;
+          if (level < 0.035) speechMouthRef.current.open *= 0.86;
           setMicLevel(Math.min(100, Math.round(level * 100)));
           audioFrameRef.current = requestAnimationFrame(analyse);
         };
@@ -283,7 +284,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           tilt: smooth(current.tilt, target.tilt, 0.12), scale: smooth(current.scale, target.scale, 0.10, 0.0015),
           mouth: smooth(current.mouth, target.mouth, 0.28, 0.008),
         };
-        faceDetectedRef.current = true;
+        lastFaceAtRef.current = performance.now();
         void nose;
         setTracking(true);
       });
@@ -294,12 +295,12 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           faceBusyRef.current = true;
           try { await faceMeshRef.current.send({ image: video }); } catch { /* A dropped frame is harmless. */ }
           finally { faceBusyRef.current = false; }
-        } else if (!faceDetectedRef.current) {
+        } else if (performance.now() - lastFaceAtRef.current > 250) {
           const current = motionRef.current;
           current.x *= 0.94; current.y *= 0.94; current.tilt *= 0.94;
           current.scale += (1 - current.scale) * 0.06; current.mouth *= 0.8;
+          setTracking(false);
         }
-        faceDetectedRef.current = false;
         faceFrameRef.current = requestAnimationFrame(detect);
       };
       faceFrameRef.current = requestAnimationFrame(detect);
