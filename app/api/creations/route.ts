@@ -13,11 +13,10 @@ export async function GET() {
     const admin = createAdminClient();
     const { data: assets, error } = await admin
       .from("media_assets")
-      .select("id, generation_id, object_path, created_at, metadata")
+      .select("id,generation_id,object_path,created_at,metadata,media_type")
       .eq("user_id", user.id)
-      .eq("media_type", "image")
       .order("created_at", { ascending: false })
-      .limit(18);
+      .limit(30);
     if (error) throw error;
 
     const items = await Promise.all((assets ?? []).map(async (asset) => {
@@ -26,10 +25,11 @@ export async function GET() {
         id: asset.id,
         generationId: asset.generation_id,
         createdAt: asset.created_at,
-        imageUrl: data?.signedUrl ?? null,
+        mediaType: asset.media_type,
+        mediaUrl: data?.signedUrl ?? null,
       };
     }));
-    return NextResponse.json({ creations: items.filter((item) => item.imageUrl) });
+    return NextResponse.json({ creations: items.filter((item) => item.mediaUrl) });
   } catch {
     return NextResponse.json({ error: "Your saved creations could not be loaded." }, { status: 500 });
   }
