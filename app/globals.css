@@ -232,3 +232,14 @@
 .live-call-call-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .live-call-call-actions button:disabled{opacity:.48;cursor:not-allowed}
 @media(max-width:560px){.live-call-call-actions{grid-template-columns:1fr}.live-call-canvas-wrap{min-height:250px}}
+
+/* Veyra Live: face tracking, calls and OBS */
+.live-call-call-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.live-call-call-actions button:disabled{opacity:.45;cursor:not-allowed}
+.live-call-camera-preview video{min-height:150px;max-height:260px;object-fit:cover}
+.live-call-camera-preview video[srcObject]{width:100%}
+.live-call-capabilities>div{min-width:0}
+.live-call-capabilities small{line-height:1.45}
+.live-call-error{padding:10px 12px;border:1px solid #fb71854d;border-radius:9px;background:#fb718510;color:#ff9aa9;font-size:11px;line-height:1.5}
+.live-call-hint{line-height:1.5}
+@media(max-width:560px){.live-call-call-actions{grid-template-columns:1fr}.live-call-camera-preview video{min-height:120px}}
