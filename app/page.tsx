@@ -7,7 +7,7 @@ import PhotoEditor from "@/app/components/photo-editor";
 import VideoStudio from "@/app/components/video-studio";
 
 type Mode = "image" | "video";
-type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl: string };
+type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl?: string; mediaUrl?: string; mediaType?: "image" | "video" };
 
 export default function Home() {
   const [mode, setMode] = useState<Mode>("image");
@@ -34,8 +34,8 @@ export default function Home() {
       setAccount({ email: user.email ?? "", name: String(profile?.full_name ?? user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: Number(wallet?.balance ?? 0) });
       const historyResponse = await fetch("/api/creations");
       if (historyResponse.ok) {
-        const history = await historyResponse.json() as { creations?: Creation[] };
-        if (active) setCreations(history.creations ?? []);
+        const history = await historyResponse.json() as { creations?: Array<{ id: string; generationId: string | null; createdAt: string; mediaType: "image" | "video"; mediaUrl: string }> };
+        if (active) setCreations((history.creations ?? []).map((item) => ({ id: item.id, generationId: item.generationId, createdAt: item.createdAt, mediaType: item.mediaType, mediaUrl: item.mediaUrl, imageUrl: item.mediaType === "image" ? item.mediaUrl : undefined })));
       }
     };
     void supabase.auth.getUser().then(({ data }) => loadAccount(data.user));
@@ -97,10 +97,10 @@ export default function Home() {
           {generatedImage && <div className="generated-result"><img src={generatedImage} alt="Your AI-generated image"/><div><strong>Image created successfully</strong><span>Saved privately · Preview link expires in one hour</span><a href={generatedImage} target="_blank" rel="noreferrer">Open full image ↗</a></div></div>}
         </section>
         <PhotoEditor onCreated={(creation) => setCreations((current) => [creation, ...current].slice(0, 18))} onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} />
-        <VideoStudio onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} />
+        <VideoStudio onCreditsChange={(credits) => setAccount((current) => current ? { ...current, credits } : current)} onCreated={(creation) => setCreations((current) => [creation, ...current].slice(0, 30))} />
         <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
         <section id="creations"><div className="section-head"><h2>My creations</h2><a href="#create">Create another ↗</a></div>
-          {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.imageUrl} target="_blank" rel="noreferrer" key={creation.id}><img src={creation.imageUrl} alt="Saved AI creation"/><span>{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images and videos you create will appear here and stay saved to your private account.</span></div>}
+          {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.mediaUrl ?? creation.imageUrl ?? "#"} target="_blank" rel="noreferrer" key={creation.id}>{creation.mediaType === "video" ? <video src={creation.mediaUrl} muted playsInline preload="metadata"/> : <img src={creation.mediaUrl ?? creation.imageUrl} alt="Saved AI creation"/>}<span>{creation.mediaType === "video" ? "VIDEO · " : ""}{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images and videos you create will appear here and stay saved to your private account.</span></div>}
         </section>
         <footer className="footer-note"><span>© 2026 Veyra AI. Imagine it. Bring it to life.</span><span>Image generation is connected · Video tools are in preview</span></footer>
       </main>
