@@ -29,7 +29,7 @@ Create `.env.local` from `.env.example`. Never commit real environment values.
 - `VEYRA_VIDEO_CREDITS_PER_SECOND`: optional Veyra credit price per generated second (defaults to 20).
 - `VEYRA_VIDEO_EDIT_CREDITS_PER_SECOND`: optional Veyra credit price per edited second (defaults to 36).
 
-Add the four required variables plus the Runway key to the Vercel project settings and redeploy. The two video credit settings are optional. Image generation uses the OpenAI Images API with `gpt-image-2.5-flare`. Your OpenAI organization may need image-model access or organization verification.
+Add all five required variables to the Vercel project settings and redeploy. The two video credit settings are optional. Image generation uses the OpenAI Images API with `gpt-image-2.5-flare`. Your OpenAI organization may need image-model access or organization verification.
 
 ## Image generation and credits
 
