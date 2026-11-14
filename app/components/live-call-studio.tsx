@@ -22,14 +22,14 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const frameRef = useRef<number>(0);
+  const drawFrameRef = useRef<number>(0);\n  const audioFrameRef = useRef<number>(0);
   const levelRef = useRef(0);
   const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1 });
   const previousFrameRef = useRef<Uint8ClampedArray | null>(null);
   const photoUrlRef = useRef("");
 
   const stopMedia = useCallback(() => {
-    cancelAnimationFrame(frameRef.current);
+    cancelAnimationFrame(drawFrameRef.current);\n    cancelAnimationFrame(audioFrameRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     audioContextRef.current?.close().catch(() => undefined);
@@ -97,12 +97,12 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       ctx.textAlign = "center";
       ctx.fillText("Upload a photo to create your avatar preview", width / 2, height / 2);
     }
-    frameRef.current = requestAnimationFrame(drawAvatar);
+    drawFrameRef.current = requestAnimationFrame(drawAvatar);
   }, [mode]);
 
   useEffect(() => {
     frameRef.current = requestAnimationFrame(drawAvatar);
-    return () => cancelAnimationFrame(frameRef.current);
+    return () => cancelAnimationFrame(drawFrameRef.current);
   }, [drawAvatar, photo]);
 
   async function startCamera() {
@@ -141,10 +141,10 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           const level = Math.max(0, (rms - 0.012) * 4.2);
           levelRef.current = level;
           setMicLevel(Math.min(100, Math.round(level * 100)));
-          frameRef.current = requestAnimationFrame(analyse);
+          audioFrameRef.current = requestAnimationFrame(analyse);
         };
         void audioContext.resume();
-        frameRef.current = requestAnimationFrame(analyse);
+        audioFrameRef.current = requestAnimationFrame(analyse);
         setMicOn(true);
       }
       setCameraOn(true);
