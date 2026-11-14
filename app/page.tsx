@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import PhotoEditor from "@/app/components/photo-editor";
-import VideoStudio from "@/app/components/video-studio";
+const StudioLoader = () => <div className="studio-lazy-placeholder" aria-label="Loading creative studio"><span className="loading-orb" />Loading studio tools…</div>;
+const PhotoEditor = dynamic(() => import("@/app/components/photo-editor"), { loading: StudioLoader });
+const VideoStudio = dynamic(() => import("@/app/components/video-studio"), { loading: StudioLoader });
 
 type Mode = "image" | "video";
 type Creation = { id: string; generationId: string | null; createdAt: string; imageUrl?: string; mediaUrl?: string; mediaType?: "image" | "video" };
