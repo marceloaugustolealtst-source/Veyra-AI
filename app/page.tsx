@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Aperture, Bell, Clapperboard, Compass, CreditCard, Film, ImagePlus, LayoutDashboard, LockKeyhole, LogOut, Settings2, Sparkles, Upload, WandSparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -21,6 +21,31 @@ export default function Home() {
   const [generatedImage, setGeneratedImage] = useState("");
   const [creations, setCreations] = useState<Creation[]>([]);
   const [account, setAccount] = useState<{ email: string; name: string; credits: number } | null>(null);
+  type Notification = { id: string; notification_type: string; title: string; message: string; related_id: string | null; read_at: string | null; created_at: string };
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationShake, setNotificationShake] = useState(false);
+  const latestNotificationId = useRef<string | null>(null);
+
+  async function refreshNotifications(animateNew = false) {
+    const response = await fetch("/api/notifications", { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as { notifications?: Notification[] };
+    const next = data.notifications ?? [];
+    const newestId = next[0]?.id ?? null;
+    if (animateNew && latestNotificationId.current && newestId && newestId !== latestNotificationId.current) setNotificationShake(true);
+    latestNotificationId.current = newestId;
+    setNotifications(next);
+  }
+
+  async function markNotificationRead(id?: string) {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(id ? { id } : { all: true }),
+    });
+    await refreshNotifications();
+  }
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
@@ -44,6 +69,17 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void loadAccount(session?.user ?? null); });
     return () => { active = false; subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!account) {
+      setNotifications([]);
+      latestNotificationId.current = null;
+      return;
+    }
+    void refreshNotifications();
+    const timer = window.setInterval(() => { void refreshNotifications(true); }, 20000);
+    return () => window.clearInterval(timer);
+  }, [account?.email]);
 
   async function handleSignOut() {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
@@ -83,16 +119,30 @@ export default function Home() {
         <div className="nav-label">WORKSPACE</div>
         <nav className="nav"><a className="active" href="#"><LayoutDashboard size={17}/><span>Overview</span></a><a href="#create"><ImagePlus size={17}/><span>Image generator</span></a><a href="#photo-editor"><WandSparkles size={17}/><span>AI photo editor</span></a><a href="#video-studio"><Film size={17}/><span>Video generator</span></a><a href="#video-studio"><Clapperboard size={17}/><span>Video editor</span></a><a href="#creations"><Compass size={17}/><span>Explore creations</span></a></nav>
         <div className="nav-label">YOUR LIBRARY</div>
-        <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><CreditCard size={17}/><span>Plans & credits</span></a><a href="#settings"><Settings2 size={17}/><span>Settings</span></a></nav>
-        <div className="side-bottom"><div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><button type="button" disabled>Explore plans · Coming soon</button></div><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
+        <nav className="nav"><a href="#creations"><Aperture size={17}/><span>My creations</span></a><a href="#plans"><CreditCard size={17}/><span>Plans & credits</span></a><a href="#settings"><Settings2 size={17}/><span>Account settings</span></a></nav>
+        <div className="side-bottom"><div className="upgrade"><strong>Make more with Veyra</strong><p>Unlock more creative possibilities with a Creator plan.</p><a href="#plans">View credits and plans</a></div><div className="user"><span className="avatar">{account ? account.name.slice(0,1).toUpperCase() : "G"}</span><span>{account ? account.name : "Guest workspace"}<small>{account ? account.email : <a href="/auth">Create an account to save your work</a>}</small></span></div></div>
       </aside>
       <main className="main">
-        <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><button className="icon-btn" aria-label="Notifications" type="button"><Bell size={16}/></button></div></header>
+        <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><div className="notification-wrap">
+            <button className={"icon-btn notification-button " + (notificationShake ? "notification-shake" : "")} aria-label={"Notifications, " + notifications.filter(item => !item.read_at).length + " unread"} aria-expanded={notificationsOpen} type="button" onClick={() => { setNotificationsOpen(open => !open); setNotificationShake(false); }}>
+              <Bell size={16}/>{notifications.some(item => !item.read_at) && <span className="notification-dot" />}
+            </button>
+            {notificationsOpen && <div className="notification-panel" role="dialog" aria-label="Notifications">
+              <div className="notification-panel-head"><strong>Notifications</strong><button type="button" onClick={() => void markNotificationRead()}>Mark all read</button></div>
+              <div className="notification-list">
+                {notifications.length ? notifications.map(item => <button type="button" className={"notification-item " + (item.read_at ? "" : "unread")} key={item.id} onClick={() => { if (!item.read_at) void markNotificationRead(item.id); }}>
+                  <span className="notification-item-icon">{item.notification_type === "credits" ? <Zap size={14}/> : <Sparkles size={14}/>}</span>
+                  <span><strong>{item.title}</strong><small>{item.message}</small><time>{new Date(item.created_at).toLocaleString()}</time></span>
+                  {!item.read_at && <i />}
+                </button>) : <p className="notification-empty">You're all caught up. New updates will appear here.</p>}
+              </div>
+            </div>}
+          </div></div></header>
         <section className="welcome"><div><div className="eyebrow">YOUR CREATIVE SPACE</div><h1>Make something extraordinary.</h1><p>Bring your ideas to life with image and video creation powered by AI.</p></div><span className="status"><Sparkles size={12} style={{display:"inline",verticalAlign:"-2px",color:"#b79aff"}}/> Image studio</span></section>
         <section className="studio" id="create">
           <div className="studio-head"><div><h2>What would you like to create?</h2><p>Write a prompt, choose your image quality and generate.</p></div><div className="mode-tabs" role="tablist" aria-label="Creation type"><button className={mode === "image" ? "selected" : ""} onClick={() => setMode("image")} role="tab" aria-selected={mode === "image"} type="button">✦ Image</button><button className={mode === "video" ? "selected" : ""} onClick={() => setMode("video")} role="tab" aria-selected={mode === "video"} type="button">▶ Video</button></div></div>
           <div className="prompt-wrap"><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Describe the image you imagine… e.g. A cinematic editorial portrait in warm golden-hour light, shot on an 85mm lens." aria-label="Creative prompt"/>
-            <div className="prompt-footer"><div className="prompt-tools"><span className="soft-btn" style={{display:"inline-flex",alignItems:"center",gap:7,opacity:.55}}><Upload size={13}/> Reference editing · Soon</span><select className="soft-btn" aria-label="Image size" value={size} onChange={(event) => setSize(event.target.value)}><option value="1024x1024">Square · 1:1</option><option value="1536x1024">Landscape · 3:2</option><option value="1024x1536">Portrait · 2:3</option></select><select className="soft-btn" aria-label="Image quality" value={quality} onChange={(event) => setQuality(event.target.value as "low" | "medium" | "high")}><option value="low">Draft · 8 credits</option><option value="medium">Standard · 12 credits</option><option value="high">High · 20 credits</option></select></div><button className="generate-btn" type="button" onClick={handleGenerate} disabled={busy || (mode === "image" && !prompt.trim())} style={{cursor:busy ? "wait" : "pointer",opacity:busy ? 0.65 : 1}}><Sparkles size={14} style={{display:"inline",verticalAlign:"-2px"}}/> {busy ? "Creating image…" : mode === "image" ? `Generate · ${cost} credits` : "Video · Coming soon"}</button></div>
+            <div className="prompt-footer"><div className="prompt-tools"><span className="soft-btn" style={{display:"inline-flex",alignItems:"center",gap:7,opacity:.55}}><Upload size={13}/> Edit a reference image below</span><select className="soft-btn" aria-label="Image size" value={size} onChange={(event) => setSize(event.target.value)}><option value="1024x1024">Square · 1:1</option><option value="1536x1024">Landscape · 3:2</option><option value="1024x1536">Portrait · 2:3</option></select><select className="soft-btn" aria-label="Image quality" value={quality} onChange={(event) => setQuality(event.target.value as "low" | "medium" | "high")}><option value="low">Draft · 8 credits</option><option value="medium">Standard · 12 credits</option><option value="high">High · 20 credits</option></select></div><button className="generate-btn" type="button" onClick={handleGenerate} disabled={busy || (mode === "image" && !prompt.trim())} style={{cursor:busy ? "wait" : "pointer",opacity:busy ? 0.65 : 1}}><Sparkles size={14} style={{display:"inline",verticalAlign:"-2px"}}/> {busy ? "Creating image…" : mode === "image" ? `Generate · ${cost} credits` : "Open video studio"}</button></div>
           </div>
           <p className="notice"><LockKeyhole size={11} style={{display:"inline",verticalAlign:"-2px"}}/> Images are generated on the server, stored in your private Veyra library, and charged after a successful credit reservation. Failed generations are refunded automatically.</p>
           {message && <p className="generation-message" role="status">{message}</p>}
@@ -103,6 +153,14 @@ export default function Home() {
         <section id="tools"><div className="section-head"><h2>Creative tools</h2><a href="#create">Explore workspace ↗</a></div><div className="tool-grid"><a className="tool-card" href="#create"><span className="tool-symbol"><ImagePlus size={18}/></span><strong>Image generation</strong><p>Turn a text description into a visual creation.</p></a><a className="tool-card" href="#create"><span className="tool-symbol"><WandSparkles size={18}/></span><strong>Photo editing</strong><p>Transform, refine and enhance your images.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Film size={18}/></span><strong>Video generation</strong><p>Bring a prompt or still image into motion.</p></a><a className="tool-card" href="#video-studio"><span className="tool-symbol"><Clapperboard size={18}/></span><strong>Video editing</strong><p>Shape clips and build cinematic sequences.</p></a></div></section>
         <section id="creations"><div className="section-head"><h2>My creations</h2><a href="#create">Create another ↗</a></div>
           {creations.length > 0 ? <div className="saved-creations">{creations.map((creation) => <a className="saved-creation" href={creation.mediaUrl ?? creation.imageUrl ?? "#"} target="_blank" rel="noreferrer" key={creation.id}>{creation.mediaType === "video" ? <video src={creation.mediaUrl} muted playsInline preload="metadata"/> : <img src={creation.mediaUrl ?? creation.imageUrl} alt="Saved AI creation"/>}<span>{creation.mediaType === "video" ? "VIDEO · " : ""}{new Date(creation.createdAt).toLocaleDateString()}</span></a>)}</div> : <div className="empty-creations"><Sparkles size={18}/><strong>Your creative library is ready</strong><span>Images and videos you create will appear here and stay saved to your private account.</span></div>}
+        </section>
+        <section id="plans" className="account-info-section">
+          <div className="section-head"><h2>Credits and plans</h2></div>
+          <div className="account-info-card"><strong>{account ? account.credits.toLocaleString() : "Sign in"} credits available</strong><p>Credits are used for image generation, photo editing and video creation. Subscription purchases are not enabled yet, so no plan or payment button is presented as active.</p></div>
+        </section>
+        <section id="settings" className="account-info-section">
+          <div className="section-head"><h2>Account settings</h2></div>
+          <div className="account-info-card"><strong>{account?.name ?? "Guest workspace"}</strong><p>{account ? account.email : "Sign in to view your account details."}</p><a href="/auth">{account ? "Manage sign-in and account access" : "Sign in or create an account"}</a></div>
         </section>
         <footer className="footer-note"><span>© 2026 Veyra AI. Imagine it. Bring it to life.</span><span>Image and video studio · Secure provider connections</span></footer>
       </main>
