@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       const extension = mediaPath.toLowerCase().split(".").pop();
       const allowed = mode === "video_edit" ? ["mp4", "webm", "mov"] : ["png", "jpg", "jpeg", "webp"];
       if (!extension || !allowed.includes(extension)) return NextResponse.json({ error: "The uploaded file type is not supported for this operation." }, { status: 400 });
-      const { data: signed, error } = await admin.storage.from(BUCKET).createSignedUrl(mediaPath, 60 * 60);
+      const { data: signed, error } = await admin.storage.from(BUCKET).createSignedUrl(mediaPath, 60 * 60 * 24);
       if (error || !signed?.signedUrl) return NextResponse.json({ error: "Could not access your uploaded media. Please upload it again." }, { status: 400 });
       mediaUrl = signed.signedUrl;
     }
