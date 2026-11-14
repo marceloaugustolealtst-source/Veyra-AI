@@ -34,11 +34,34 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     setStatus("");
   }
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
     setVideoUrl("");
     setMessage("");
+    if (next && mode === "video_edit") {
+      const objectUrl = URL.createObjectURL(next);
+      try {
+        const seconds = await new Promise<number>((resolve, reject) => {
+          const element = document.createElement("video");
+          element.preload = "metadata";
+          element.onloadedmetadata = () => resolve(element.duration);
+          element.onerror = () => reject(new Error("The source video duration could not be read."));
+          element.src = objectUrl;
+        });
+        if (!Number.isFinite(seconds) || seconds < 3 || seconds > 30) {
+          setMessage("Aleph editing currently accepts source videos from 3 to 30 seconds.");
+          setFile(null);
+          return;
+        }
+        setDuration(Math.ceil(seconds));
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : "Could not read the source video.");
+        setFile(null);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
   }
 
   async function start() {
@@ -92,7 +115,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
         }
         if (result.status === "failed" || result.status === "cancelled") throw new Error(result.error || "Video generation failed. Reserved credits have been returned.");
       }
-      setStatus("Your video is still processing. Keep this page open and check again shortly; the video is still processing.");
+      setStatus("Your video is still processing. Your video is still processing. Keep this page open to continue checking its progress.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Video generation failed. Please try again.");
       setStatus("");
@@ -120,10 +143,10 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
           <textarea id="video-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={1000} placeholder={editing ? "e.g. Change the scene to a golden-hour beach while keeping the subject and camera movement…" : "e.g. A cinematic tracking shot of a futuristic city at dusk, glowing reflections, atmospheric camera movement…"}/>
           {mode !== "text_to_video" && <label className="video-upload">
             {preview ? <img src={preview} alt="Video starting frame"/> : <span><Upload size={20}/><strong>{file ? file.name : editing ? "Upload a source video" : "Upload a starting image"}</strong><small>{editing ? "MP4 or WebM · up to 100 MB · max 30 seconds" : "PNG, JPG or WebP · up to 20 MB"}</small></span>}
-            <input type="file" accept={editing ? "video/mp4,video/webm,video/quicktime" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
+            <input type="file" accept={editing ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
           </label>}
           <div className="editor-selects">
-            <label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5,10,15,20,25,30].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
+            <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{[3,5,8,10,15,20,25,30].map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
             <label>Aspect ratio<select value={ratio} onChange={(event) => setRatio(event.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></label>
           </div>
           <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : `Create video · ${cost} credits`}</button>
