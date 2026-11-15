@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, MonitorUp, Radio, ScanFace, UserRound, Video, VideoOff, Volume2, Phone, PhoneOff, Link2 } from "lucide-react";
 import { MeteredPeer } from "@metered-ca/realtime";
+import PhotoDepthAvatar from "@/app/components/photo-depth-avatar";
 
 type AvatarMode = "full" | "half";
 type AvatarBackground = "studio" | "green" | "transparent";
@@ -84,6 +85,10 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [cameraError, setCameraError] = useState("");
   const [micLevel, setMicLevel] = useState(0);
   const [tracking, setTracking] = useState(false);
+  const [faceTrack, setFaceTrack] = useState<FacePoint[] | null>(null);
+  const [leftHandTrack, setLeftHandTrack] = useState<FacePoint[] | null>(null);
+  const [rightHandTrack, setRightHandTrack] = useState<FacePoint[] | null>(null);
+  const [mouthOpenTrack, setMouthOpenTrack] = useState(0);
   const [rigReady, setRigReady] = useState(false);
   const [segmentationStatus, setSegmentationStatus] = useState("Preparing photo mask…");
   const [stage, setStage] = useState<"setup" | "preview">("setup");
@@ -380,6 +385,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         const pose = results.poseLandmarks;
         livePoseRef.current = pose ?? null;
         liveFaceRef.current = points ?? null;
+        setFaceTrack(points ?? null);
+        setLeftHandTrack(results.leftHandLandmarks ?? null);
+        setRightHandTrack(results.rightHandLandmarks ?? null);
         if (!points) { setTracking(false); return; }
         const leftEye = points[33], rightEye = points[263], forehead = points[10], chin = points[152];
         const mouthTop = points[13], mouthBottom = points[14], mouthLeft = points[61], mouthRight = points[291];
@@ -388,6 +396,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         const tilt = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
         const faceHeight = Math.max(0.001, Math.abs(chin.y - forehead.y));
         const mouthRatio = Math.min(1, Math.max(0, Math.abs(mouthBottom.y - mouthTop.y) / Math.max(0.001, Math.abs(mouthRight.x - mouthLeft.x)) * 3.2));
+        setMouthOpenTrack(mouthRatio);
         const leftShoulder = pose?.[11], rightShoulder = pose?.[12];
         const leftWrist = pose?.[15], rightWrist = pose?.[16];
         const shoulderY = leftShoulder && rightShoulder ? (leftShoulder.y + rightShoulder.y) / 2 : eyeCenterY + faceHeight * 1.8;
@@ -604,6 +613,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         <div className="live-call-preview-column">
           <div className="live-call-preview-title"><strong>Live animated avatar</strong><span><i/> LOCAL PREVIEW</span></div>
           <div className="live-call-avatar-preview live-call-canvas-wrap"><canvas ref={canvasRef} width={640} height={640} aria-label="Live avatar canvas preview"/><div className="preview-type-label">{mode === "full" ? "FULL-BODY AVATAR" : "HALF-BODY AVATAR"}</div></div>
+          {photo && <PhotoDepthAvatar photo={photo} face={faceTrack} leftHand={leftHandTrack} rightHand={rightHandTrack} mouthOpen={mouthOpenTrack} />}
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Camera size={13}/> Camera source</span><b className={cameraOn ? "camera-live" : ""}>{cameraOn ? "CAMERA ON" : "CAMERA OFF"}</b></div><video ref={videoRef} muted playsInline autoPlay/>{!cameraOn && <div className="camera-preview-empty"><VideoOff size={22}/><span>Enable camera and microphone to begin</span></div>}</div>
           <div className="live-call-capabilities">
             <div><ScanFace size={15}/><span><strong>Face + body tracking</strong><small>{tracking ? "Face detected · head, shoulders, torso lean and raised-hand gestures are tracking." : cameraOn ? "Looking for your face and upper-body pose." : "Waiting for camera permission."}</small></span></div>
