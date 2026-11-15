@@ -246,3 +246,18 @@
 
 /* OBS Studio setup steps */
 .obs-steps{margin:13px 0 0;padding-left:19px;display:grid;gap:8px;color:#a7a9b8;font-size:10px;line-height:1.55}.obs-steps b{color:#e8e2f5}.obs-steps li::marker{color:#b69aff}
+
+
+/* On-device 3D avatar depth preview */
+.photo3d-panel{display:grid;gap:10px;padding:14px;border:1px solid #a78bfa38;border-radius:12px;background:#0b0d14}
+.photo3d-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#e9e4f4;font-size:11px}
+.photo3d-heading span{padding:5px 8px;border:1px solid #a78bfa44;border-radius:20px;color:#c9b7ff;font-size:8px;letter-spacing:1px}
+.photo3d-view{width:100%;height:320px;overflow:hidden;border:1px solid #ffffff18;border-radius:10px;background:#0b0d15;touch-action:pan-y}
+.photo3d-view canvas{display:block;width:100%;height:100%;outline:none}
+.photo3d-status{color:#c9b7ff;font-size:10px;line-height:1.5}
+.photo3d-progress{height:4px;overflow:hidden;border-radius:5px;background:#ffffff16}
+.photo3d-progress i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#a78bfa,#7fa7ff);transition:width .2s}
+.photo3d-help{margin:0;color:#858a9c;font-size:9px;line-height:1.55}
+.photo3d-tracking{display:flex;flex-wrap:wrap;gap:7px}
+.photo3d-tracking span{padding:6px 8px;border:1px solid #ffffff18;border-radius:7px;color:#b7bac8;font-size:9px}
+@media(max-width:560px){.photo3d-view{height:260px}}
