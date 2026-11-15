@@ -5,9 +5,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type Landmark = { x: number; y: number; z?: number };
-type Props = { photo: string; face?: Landmark[] | null; leftHand?: Landmark[] | null; rightHand?: Landmark[] | null; mouthOpen?: number; onCanvasReady?: (canvas: HTMLCanvasElement | null) => void };
+type Props = { photo: string; sourceFace?: Landmark[] | null; face?: Landmark[] | null; leftHand?: Landmark[] | null; rightHand?: Landmark[] | null; mouthOpen?: number; onCanvasReady?: (canvas: HTMLCanvasElement | null) => void };
 
-export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mouthOpen = 0, onCanvasReady }: Props) {
+export default function PhotoDepthAvatar({ photo, sourceFace, face, leftHand, rightHand, mouthOpen = 0, onCanvasReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -159,9 +159,9 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
         const texture = await new THREE.TextureLoader().loadAsync(photo);
         texture.colorSpace = THREE.SRGBColorSpace;
         const material = new THREE.ShaderMaterial({
-          uniforms: { map: { value: texture }, uMouth: { value: 0 }, uBlink: { value: 0 } },
+          uniforms: { map: { value: texture }, uMouth: { value: 0 }, uBlink: { value: 0 }, uMouthCenter: { value: new THREE.Vector2(sourceFace?.[13]?.x ?? 0.5, 1-(sourceFace?.[13]?.y ?? 0.66)) }, uEyeLeft: { value: new THREE.Vector2(sourceFace?.[33]?.x ?? 0.4, 1-(sourceFace?.[33]?.y ?? 0.42)) }, uEyeRight: { value: new THREE.Vector2(sourceFace?.[263]?.x ?? 0.6, 1-(sourceFace?.[263]?.y ?? 0.42)) } },
           vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-          fragmentShader: `uniform sampler2D map; uniform float uMouth; uniform float uBlink; varying vec2 vUv; void main(){ vec2 uv=vUv; float mouth=distance(uv,vec2(0.5,0.34)); float mouthMask=1.0-smoothstep(0.012,0.055,mouth); uv.y += mouthMask*uMouth*0.006; float eyeL=distance(uv,vec2(0.39,0.62)); float eyeR=distance(uv,vec2(0.61,0.62)); float eyes=1.0-smoothstep(0.018,0.055,min(eyeL,eyeR)); uv.y -= eyes*uBlink*0.003; gl_FragColor=texture2D(map,clamp(uv,0.0,1.0)); }`,
+          fragmentShader: `uniform sampler2D map; uniform float uMouth; uniform float uBlink; uniform vec2 uMouthCenter; uniform vec2 uEyeLeft; uniform vec2 uEyeRight; varying vec2 vUv; void main(){ vec2 uv=vUv; float mouth=distance(uv,uMouthCenter); float mouthMask=1.0-smoothstep(0.008,0.045,mouth); uv.y += mouthMask*uMouth*0.012; float eyeL=distance(uv,uEyeLeft); float eyeR=distance(uv,uEyeRight); float eyes=1.0-smoothstep(0.012,0.04,min(eyeL,eyeR)); uv.y -= eyes*uBlink*0.006; gl_FragColor=texture2D(map,clamp(uv,0.0,1.0)); }`,
         });
         created = new THREE.Mesh(geometry, material);
         if (cancelled) { geometry.dispose(); material.dispose(); texture.dispose(); return; }
