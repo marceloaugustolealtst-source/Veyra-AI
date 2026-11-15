@@ -5,6 +5,7 @@ import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, Mo
 import { MeteredPeer } from "@metered-ca/realtime";
 
 type AvatarMode = "full" | "half";
+type AvatarBackground = "studio" | "green" | "transparent";
 type FacePoint = { x: number; y: number; z?: number; visibility?: number };
 type HolisticResult = {
   faceLandmarks?: FacePoint[];
@@ -91,6 +92,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [callError, setCallError] = useState("");
   const [inCall, setInCall] = useState(false);
   const [obsOn, setObsOn] = useState(false);
+  const [avatarBackground, setAvatarBackground] = useState<AvatarBackground>("studio");
   const [obsMessage, setObsMessage] = useState("OBS output is not active.");
   const [hasInvite, setHasInvite] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -103,6 +105,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const segmentedPhotoRef = useRef<HTMLCanvasElement | null>(null);
   const sourcePoseRef = useRef<FacePoint[] | null>(null);
+  const sourceFaceRef = useRef<FacePoint[] | null>(null);
+  const liveFaceRef = useRef<FacePoint[] | null>(null);
   const livePoseRef = useRef<FacePoint[] | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const drawFrameRef = useRef<number>(0);
@@ -176,7 +180,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!photo) { imageRef.current = null; segmentedPhotoRef.current = null; sourcePoseRef.current = null; setRigReady(false); return; }
+    if (!photo) { imageRef.current = null; segmentedPhotoRef.current = null; sourcePoseRef.current = null; sourceFaceRef.current = null; setRigReady(false); return; }
     let cancelled = false;
     const image = new Image();
     image.onload = async () => {
@@ -214,7 +218,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
             tracker.onResults(resolve);
             try { await tracker.send({ image }); } catch (error) { reject(error); }
           });
-          if (!cancelled) sourcePoseRef.current = sourceResult.poseLandmarks ?? null;
+          if (!cancelled) { sourcePoseRef.current = sourceResult.poseLandmarks ?? null; sourceFaceRef.current = sourceResult.faceLandmarks ?? null; }
           tracker.close();
         }
         if (!cancelled) {
@@ -237,8 +241,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     if (!ctx) return;
     const width = canvas.width, height = canvas.height;
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#0b0d15";
-    ctx.fillRect(0, 0, width, height);
+    if (avatarBackground === "studio") { ctx.fillStyle = "#0b0d15"; ctx.fillRect(0, 0, width, height); }
+    else if (avatarBackground === "green") { ctx.fillStyle = "#00ff00"; ctx.fillRect(0, 0, width, height); }
     if (image) {
       const motion = motionRef.current;
       const source = segmentedPhotoRef.current ?? image;
@@ -247,8 +251,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       const left = width/2-w/2+motion.x+motion.lean*7, top = height/2-h/2+motion.y-motion.handLift*5;
       const sourcePoint = (gx:number,gy:number):[number,number] => [gx*image.width,gy*image.height];
       const anchors = sourcePoseRef.current, live = livePoseRef.current;
+      const faceAnchors = sourceFaceRef.current, faceLive = liveFaceRef.current;
       if (segmentedPhotoRef.current && anchors?.length && live?.length) {
-        const cols=22, rows=22;
+        const cols=32, rows=32;
         const moved = (gx:number,gy:number):[number,number] => {
           let dx=0,dy=0,total=0;
           for (const index of RIG_POSE_INDICES) {
@@ -257,8 +262,17 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
             const d2=(gx-a.x)*(gx-a.x)+(gy-a.y)*(gy-a.y), weight=Math.exp(-d2/0.012);
             dx+=(b.x-a.x)*w*weight; dy+=(b.y-a.y)*h*weight; total+=weight;
           }
+          let faceDx=0, faceDy=0, faceWeight=0;
+          if (faceAnchors?.length && faceLive?.length) {
+            for (const index of [10,33,133,159,145,263,362,386,374,1,13,14,61,291,152,234,454]) {
+              const a=faceAnchors[index], b=faceLive[index]; if (!a || !b) continue;
+              const d2=(gx-a.x)*(gx-a.x)+(gy-a.y)*(gy-a.y), weight=Math.exp(-d2/0.0028);
+              faceDx+=(b.x-a.x)*w*weight; faceDy+=(b.y-a.y)*h*weight; faceWeight+=weight;
+            }
+          }
           const gain=total>0 ? Math.min(2.8, 2.8*total/(total+0.65)) : 0;
-          return [left+gx*w+(total ? dx/total*gain : 0),top+gy*h+(total ? dy/total*gain : 0)];
+          const faceGain=faceWeight>0 ? Math.min(1.35, 1.35*faceWeight/(faceWeight+0.35)) : 0;
+          return [left+gx*w+(total ? dx/total*gain : 0)+(faceWeight ? faceDx/faceWeight*faceGain : 0),top+gy*h+(total ? dy/total*gain : 0)+(faceWeight ? faceDy/faceWeight*faceGain : 0)];
         };
         for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) {
           const x0=x/cols,y0=y/rows,x1=(x+1)/cols,y1=(y+1)/rows;
@@ -281,7 +295,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       ctx.fillText("Upload a photo to create your avatar preview", width / 2, height / 2);
     }
     drawFrameRef.current = requestAnimationFrame(drawAvatar);
-  }, [mode]);
+  }, [mode, avatarBackground]);
 
   useEffect(() => {
     drawFrameRef.current = requestAnimationFrame(drawAvatar);
@@ -365,6 +379,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         const points = results.faceLandmarks;
         const pose = results.poseLandmarks;
         livePoseRef.current = pose ?? null;
+        liveFaceRef.current = points ?? null;
         if (!points) { setTracking(false); return; }
         const leftEye = points[33], rightEye = points[263], forehead = points[10], chin = points[152];
         const mouthTop = points[13], mouthBottom = points[14], mouthLeft = points[61], mouthRight = points[291];
@@ -472,7 +487,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       await obsVideoRef.current.play().catch(() => undefined);
     }
     setObsOn(true);
-    setObsMessage("Avatar canvas is streaming at 30 FPS in this browser tab. In OBS, add a Window Capture or Browser Source for this page. Browser media streams cannot install or switch on the operating-system OBS Virtual Camera driver.");
+    setObsMessage("Local canvas preview stream is active. In OBS Studio, add a Window Capture for this Veyra tab; use the green background + Chroma Key filter, or transparent background with a supported Browser Source. Then click Start Virtual Camera in OBS.");
   }
 
   async function connectRoom(roomId: string, host: boolean) {
@@ -603,7 +618,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           </div>
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Video size={13}/> Other participant</span><b>{inCall ? callStatus.toUpperCase() : "NOT CONNECTED"}</b></div><video ref={remoteVideoRef} autoPlay playsInline/><div className="camera-preview-empty"><span>{inCall ? callStatus : "The other participant appears here after they join."}</span></div></div>
           {callError && <p className="live-call-error" role="alert">{callError}</p>}
-          <div className="live-call-block"><label className="live-call-label">OBS / streaming output</label><div className="camera-permission-row"><span className="camera-icon"><MonitorUp size={18}/></span><span><strong>Canvas capture stream</strong><small>30 FPS browser stream for OBS capture.</small></span><button type="button" className={obsOn ? "camera-toggle on" : "camera-toggle"} onClick={() => obsOn ? stopObsOutput() : void startObsOutput()}>{obsOn ? "Stop" : "Start"}</button></div><video ref={obsVideoRef} muted playsInline autoPlay style={{width:"100%",maxHeight:100,background:"#080a10",borderRadius:8}}/><p className="live-call-hint">{obsMessage}</p></div>
+          <div className="live-call-block"><label className="live-call-label">OBS Studio / streaming output</label><div className="avatar-mode-options"><button type="button" className={avatarBackground === "studio" ? "chosen" : ""} onClick={() => setAvatarBackground("studio")}><strong>Studio</strong><small>Dark background</small></button><button type="button" className={avatarBackground === "green" ? "chosen" : ""} onClick={() => setAvatarBackground("green")}><strong>Green screen</strong><small>Chroma Key in OBS</small></button><button type="button" className={avatarBackground === "transparent" ? "chosen" : ""} onClick={() => setAvatarBackground("transparent")}><strong>Transparent</strong><small>For alpha-capable capture</small></button></div><div className="camera-permission-row" style={{marginTop:12}}><span className="camera-icon"><MonitorUp size={18}/></span><span><strong>Local output preview</strong><small>30 FPS canvas capture; OBS captures this Veyra window separately.</small></span><button type="button" className={obsOn ? "camera-toggle on" : "camera-toggle"} onClick={() => obsOn ? stopObsOutput() : void startObsOutput()}>{obsOn ? "Stop" : "Preview"}</button></div><video ref={obsVideoRef} muted playsInline autoPlay style={{width:"100%",maxHeight:100,background:"#080a10",borderRadius:8}}/><ol className="obs-steps"><li>Open OBS Studio and create a scene named <b>Veyra Avatar</b>.</li><li>Add <b>Window Capture</b> and select this Veyra browser window.</li><li>For green screen, add <b>Filters → Chroma Key</b> and choose green.</li><li>In OBS, click <b>Start Virtual Camera</b> to use the avatar in Zoom, Discord or TikTok LIVE Studio.</li></ol><p className="live-call-hint">{obsMessage}</p></div>
         </div>
       </div>
       <div className="live-call-footnote">Calls use encrypted WebRTC media with Metered Realtime Messaging for private, room-scoped signalling and Metered TURN relay credentials when Auto-inject TURN is enabled. Invite links are single-guest bearer links that expire after 24 hours; both people must sign in. OBS virtual-camera drivers cannot be installed by a website: use OBS Browser Source or Window Capture, then enable OBS Virtual Camera in the OBS desktop app.</div>
