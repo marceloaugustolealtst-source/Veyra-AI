@@ -10,6 +10,7 @@ type Props = { photo: string; face?: Landmark[] | null; leftHand?: Landmark[] | 
 export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mouthOpen = 0 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const [status, setStatus] = useState("Waiting for photo");
@@ -35,6 +36,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
     const host = hostRef.current;
     if (!host) return;
     const scene = new THREE.Scene();
+    sceneRef.current = scene;
     scene.background = new THREE.Color("#0b0d15");
     const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
     camera.position.set(0, 0, 3.4);
@@ -73,7 +75,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
       cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
       meshRef.current?.geometry.dispose();
       const material = meshRef.current?.material as THREE.Material | undefined; material?.dispose();
-      renderer.dispose(); renderer.domElement.remove(); rendererRef.current = null; meshRef.current = null;
+      renderer.dispose(); renderer.domElement.remove(); rendererRef.current = null; sceneRef.current = null; meshRef.current = null;
     };
   }, []);
 
@@ -88,7 +90,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
         env.allowLocalModels = false;
         env.useBrowserCache = true;
         const depthEstimator = await pipeline("depth-estimation", "onnx-community/depth-anything-v2-small", {
-          device: "webgpu",
+          device: typeof navigator !== "undefined" && "gpu" in navigator ? "webgpu" : "wasm",
           dtype: "fp16",
           progress_callback: (event: { progress?: number; status?: string }) => {
             if (!cancelled && typeof event.progress === "number") setProgress(Math.max(5, Math.min(85, Math.round(event.progress * 0.85))));
@@ -131,11 +133,11 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
         });
         created = new THREE.Mesh(geometry, material);
         if (cancelled) { geometry.dispose(); material.dispose(); texture.dispose(); return; }
-        const scene = rendererRef.current;
+        const scene = sceneRef.current;
         if (!scene) return;
-        // Replace any previous textured depth surface in the scene.
-        const hostScene = (scene as unknown as { __veyraScene?: THREE.Scene }).__veyraScene;
-        if (hostScene) hostScene.add(created);
+        if (meshRef.current) { scene.remove(meshRef.current); meshRef.current.geometry.dispose(); (meshRef.current.material as THREE.Material).dispose(); }
+        meshRef.current = created;
+        scene.add(created);
         setProgress(100); setStatus("3D depth surface ready · drag to rotate, scroll to zoom."); setModelReady(true);
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : "On-device depth estimation failed. Try a newer browser or GPU-enabled device.");
