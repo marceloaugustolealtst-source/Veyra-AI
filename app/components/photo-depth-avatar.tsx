@@ -5,9 +5,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type Landmark = { x: number; y: number; z?: number };
-type Props = { photo: string; face?: Landmark[] | null; leftHand?: Landmark[] | null; rightHand?: Landmark[] | null; mouthOpen?: number };
+type Props = { photo: string; face?: Landmark[] | null; leftHand?: Landmark[] | null; rightHand?: Landmark[] | null; mouthOpen?: number; onCanvasReady?: (canvas: HTMLCanvasElement | null) => void };
 
-export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mouthOpen = 0 }: Props) {
+export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mouthOpen = 0, onCanvasReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -45,6 +45,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    onCanvasReady?.(renderer.domElement);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.075; controls.minDistance = 1.7; controls.maxDistance = 6;
     controlsRef.current = controls;
@@ -75,7 +76,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
       cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
       meshRef.current?.geometry.dispose();
       const material = meshRef.current?.material as THREE.Material | undefined; material?.dispose();
-      renderer.dispose(); renderer.domElement.remove(); rendererRef.current = null; sceneRef.current = null; meshRef.current = null;
+      renderer.dispose(); renderer.domElement.remove(); rendererRef.current = null; sceneRef.current = null; meshRef.current = null; onCanvasReady?.(null);
     };
   }, []);
 
