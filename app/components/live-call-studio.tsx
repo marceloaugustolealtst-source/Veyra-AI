@@ -6,33 +6,38 @@ import { MeteredPeer } from "@metered-ca/realtime";
 
 type AvatarMode = "full" | "half";
 type FacePoint = { x: number; y: number; z?: number };
-type FaceMeshResult = { multiFaceLandmarks?: FacePoint[][] };
-type FaceMeshInstance = {
+type HolisticResult = {
+  faceLandmarks?: FacePoint[];
+  poseLandmarks?: FacePoint[];
+  leftHandLandmarks?: FacePoint[];
+  rightHandLandmarks?: FacePoint[];
+};
+type HolisticInstance = {
   setOptions(options: Record<string, unknown>): void;
-  onResults(callback: (results: FaceMeshResult) => void): void;
+  onResults(callback: (results: HolisticResult) => void): void;
   send(input: { image: HTMLVideoElement | HTMLImageElement }): Promise<void>;
   close(): void;
 };
-type FaceMeshConstructor = new (options: { locateFile: (file: string) => string }) => FaceMeshInstance;
+type HolisticConstructor = new (options: { locateFile: (file: string) => string }) => HolisticInstance;
 type SpeechRecognitionInstance = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void; stop(): void; };
 
-declare global { interface Window { FaceMesh?: FaceMeshConstructor; SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance } }
+declare global { interface Window { Holistic?: HolisticConstructor; SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance } }
 
-let faceMeshLoader: Promise<void> | null = null;
-function loadFaceMesh() {
-  if (typeof window === "undefined") return Promise.reject(new Error("Face tracking requires a browser."));
-  if (window.FaceMesh) return Promise.resolve();
-  if (!faceMeshLoader) {
-    faceMeshLoader = new Promise((resolve, reject) => {
+let holisticLoader: Promise<void> | null = null;
+function loadHolistic() {
+  if (typeof window === "undefined") return Promise.reject(new Error("Body tracking requires a browser."));
+  if (window.Holistic) return Promise.resolve();
+  if (!holisticLoader) {
+    holisticLoader = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js";
+      script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js";
       script.async = true;
-      script.onload = () => window.FaceMesh ? resolve() : reject(new Error("Face tracking library did not initialize."));
-      script.onerror = () => reject(new Error("Could not load the face tracking model. Check your internet connection."));
+      script.onload = () => window.Holistic ? resolve() : reject(new Error("Holistic tracking library did not initialize."));
+      script.onerror = () => reject(new Error("Could not load the face and body tracking model. Check your internet connection."));
       document.head.appendChild(script);
     });
   }
-  return faceMeshLoader;
+  return holisticLoader;
 }
 
 export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
@@ -66,9 +71,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const audioFrameRef = useRef<number>(0);
   const faceFrameRef = useRef<number>(0);
   const levelRef = useRef(0);
-  const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1, mouth: 0 });
+  const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1, mouth: 0, lean: 0, handLift: 0 });
   const photoUrlRef = useRef("");
-  const faceMeshRef = useRef<FaceMeshInstance | null>(null);
+  const holisticRef = useRef<HolisticInstance | null>(null);
   const meteredPeerRef = useRef<MeteredPeer | null>(null);
   const roomIdRef = useRef("");
   const obsStreamRef = useRef<MediaStream | null>(null);
@@ -107,8 +112,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     streamRef.current = null;
     audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
-    faceMeshRef.current?.close();
-    faceMeshRef.current = null;
+    holisticRef.current?.close();
+    holisticRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     obsStreamRef.current?.getTracks().forEach((track) => track.stop());
     obsStreamRef.current = null;
@@ -154,8 +159,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       const ratio = Math.min(width / image.width, height / image.height) * (mode === "full" ? 0.92 : 1.12) * motion.scale;
       const w = image.width * ratio, h = image.height * ratio;
       ctx.save();
-      ctx.translate(width / 2 + motion.x, height / 2 + motion.y);
-      ctx.rotate(motion.tilt);
+      ctx.translate(width / 2 + motion.x + motion.lean * 7, height / 2 + motion.y - motion.handLift * 5);
+      ctx.rotate(motion.tilt + motion.lean * 0.012);
       ctx.drawImage(image, -w / 2, -h / 2, w, h);
       const speech = speechMouthRef.current;
       const mouth = Math.max(motion.mouth * 0.72, Math.min(1, levelRef.current * 1.8), speech.open);
@@ -241,54 +246,82 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         try { recognition.start(); } catch { /* Speech recognition is optional. */ }
       }
       setCallError("");
-      setCameraError("Loading face tracking model…");
-      await loadFaceMesh();
-      const FaceMesh = window.FaceMesh;
-      if (!FaceMesh || !videoRef.current) throw new Error("Face tracking is unavailable.");
-      const faceMesh = new FaceMesh({ locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/" + file });
-      faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
-      faceMesh.onResults((results) => {
-        const points = results.multiFaceLandmarks?.[0];
+      setCameraError("Loading face, body and hand tracking…");
+      await loadHolistic();
+      const Holistic = window.Holistic;
+      if (!Holistic || !videoRef.current) throw new Error("Face and body tracking is unavailable.");
+      const holistic = new Holistic({ locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/holistic/" + file });
+      holistic.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        refineFaceLandmarks: true,
+        minDetectionConfidence: 0.55,
+        minTrackingConfidence: 0.6,
+      });
+      holistic.onResults((results) => {
+        const points = results.faceLandmarks;
+        const pose = results.poseLandmarks;
         if (!points) { setTracking(false); return; }
-        const leftEye = points[33], rightEye = points[263], nose = points[1], forehead = points[10], chin = points[152];
+        const leftEye = points[33], rightEye = points[263], forehead = points[10], chin = points[152];
         const mouthTop = points[13], mouthBottom = points[14], mouthLeft = points[61], mouthRight = points[291];
         const eyeCenterX = (leftEye.x + rightEye.x) / 2;
         const eyeCenterY = (leftEye.y + rightEye.y) / 2;
         const tilt = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
         const faceHeight = Math.max(0.001, Math.abs(chin.y - forehead.y));
-        const mouthRatio = Math.min(1, Math.max(0, Math.abs(mouthBottom.y - mouthTop.y) / Math.max(0.001, Math.abs(mouthRight.x - mouthLeft.x)) * 2.7));
+        const mouthRatio = Math.min(1, Math.max(0, Math.abs(mouthBottom.y - mouthTop.y) / Math.max(0.001, Math.abs(mouthRight.x - mouthLeft.x)) * 3.2));
+        const leftShoulder = pose?.[11], rightShoulder = pose?.[12];
+        const leftWrist = pose?.[15], rightWrist = pose?.[16];
+        const shoulderY = leftShoulder && rightShoulder ? (leftShoulder.y + rightShoulder.y) / 2 : eyeCenterY + faceHeight * 1.8;
+        const shoulderX = leftShoulder && rightShoulder ? (leftShoulder.x + rightShoulder.x) / 2 : eyeCenterX;
+        const wristsRaised = Number(Boolean(leftWrist && leftShoulder && leftWrist.y < leftShoulder.y - 0.06)) +
+          Number(Boolean(rightWrist && rightShoulder && rightWrist.y < rightShoulder.y - 0.06));
+        const handsVisible = Boolean(results.leftHandLandmarks || results.rightHandLandmarks);
+        const torsoLean = Math.max(-1, Math.min(1, (eyeCenterX - shoulderX) * 5));
         const target = {
-          x: Math.max(-48, Math.min(48, (0.5 - eyeCenterX) * 105)),
-          y: Math.max(-38, Math.min(38, (0.43 - eyeCenterY) * 82)),
-          tilt: Math.max(-0.2, Math.min(0.2, tilt)),
-          scale: Math.max(0.94, Math.min(1.07, 0.98 + (faceHeight - 0.36) * 0.32)),
+          x: Math.max(-58, Math.min(58, (0.5 - eyeCenterX) * 118 + torsoLean * 13)),
+          y: Math.max(-46, Math.min(46, (0.43 - eyeCenterY) * 76 + (0.48 - shoulderY) * 18 - wristsRaised * 3)),
+          tilt: Math.max(-0.24, Math.min(0.24, tilt + torsoLean * 0.035)),
+          scale: Math.max(0.93, Math.min(1.08, 0.99 + (faceHeight - 0.36) * 0.3)),
           mouth: mouthRatio,
+          lean: torsoLean,
+          handLift: wristsRaised / 2,
         };
         const current = motionRef.current;
-        const smooth = (from: number, to: number, factor: number, deadzone = 0.002) => {
-          const delta = to - from;
-          return Math.abs(delta) < deadzone ? from : from + delta * factor;
+        const smooth = (from: number, to: number, factor: number, maxStep = 999) => {
+          const delta = Math.max(-maxStep, Math.min(maxStep, to - from));
+          return from + delta * factor;
         };
+        // Faster, bounded response avoids the large jumps that made the old preview shake.
         motionRef.current = {
-          x: smooth(current.x, target.x, 0.13, 0.6), y: smooth(current.y, target.y, 0.13, 0.6),
-          tilt: smooth(current.tilt, target.tilt, 0.12), scale: smooth(current.scale, target.scale, 0.10, 0.0015),
-          mouth: smooth(current.mouth, target.mouth, 0.28, 0.008),
+          x: smooth(current.x, target.x, 0.32, 12),
+          y: smooth(current.y, target.y, 0.30, 10),
+          tilt: smooth(current.tilt, target.tilt, 0.28, 0.045),
+          scale: smooth(current.scale, target.scale, 0.22, 0.018),
+          mouth: smooth(current.mouth, target.mouth, 0.48, 0.18),
+          lean: smooth(current.lean, target.lean, 0.28, 0.2),
+          handLift: smooth(current.handLift, target.handLift, 0.38, 0.3),
         };
         lastFaceAtRef.current = performance.now();
-        void nose;
         setTracking(true);
+        // Hand landmarks are deliberately detected separately from face landmarks.
+        void handsVisible;
       });
-      faceMeshRef.current = faceMesh;
+      holisticRef.current = holistic;
+      let lastInferenceAt = 0;
       const detect = async () => {
+        const now = performance.now();
         const video = videoRef.current;
-        if (!faceBusyRef.current && video && video.readyState >= 2 && faceMeshRef.current) {
+        if (!faceBusyRef.current && now - lastInferenceAt >= 33 && video && video.readyState >= 2 && holisticRef.current) {
           faceBusyRef.current = true;
-          try { await faceMeshRef.current.send({ image: video }); } catch { /* A dropped frame is harmless. */ }
+          lastInferenceAt = now;
+          try { await holisticRef.current.send({ image: video }); } catch { /* A dropped frame is harmless. */ }
           finally { faceBusyRef.current = false; }
-        } else if (performance.now() - lastFaceAtRef.current > 250) {
+        } else if (now - lastFaceAtRef.current > 350) {
           const current = motionRef.current;
-          current.x *= 0.94; current.y *= 0.94; current.tilt *= 0.94;
-          current.scale += (1 - current.scale) * 0.06; current.mouth *= 0.8;
+          current.x *= 0.9; current.y *= 0.9; current.tilt *= 0.9;
+          current.scale += (1 - current.scale) * 0.1; current.mouth *= 0.72;
+          current.lean *= 0.85; current.handLift *= 0.85;
           setTracking(false);
         }
         faceFrameRef.current = requestAnimationFrame(detect);
@@ -445,7 +478,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
             <button type="button" className={mode === "half" ? "chosen" : ""} onClick={() => setMode("half")}><span className="avatar-mode-art half-art"><ScanFace size={35}/></span><strong>Half body</strong><small>Face and shoulders</small></button>
           </div><p className="live-call-hint"><Info size={13}/> A clear front-facing portrait works best.</p></div>
           <div className="live-call-block"><label className="live-call-label">2. Upload your avatar photo</label><button type="button" className="avatar-upload" onClick={() => fileRef.current?.click()}>{photo ? <img src={photo} alt="Selected avatar"/> : <span className="avatar-upload-empty"><ImagePlus size={25}/><strong>Choose an avatar photo</strong><small>JPG, PNG or WebP · up to 12 MB</small></span>}{photo && <span className="avatar-upload-overlay">Change photo</span>}</button><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => choosePhoto(event.target.files?.[0])}/>{photoName && <div className="avatar-file-name">{photoName}</div>}</div>
-          <div className="live-call-block"><label className="live-call-label">3. Enable camera and microphone</label><div className="camera-permission-row"><span className="camera-icon"><Camera size={18}/></span><span><strong>Camera + microphone</strong><small>Face landmarks drive avatar movement and mouth opening.</small></span><button type="button" className={cameraOn ? "camera-toggle on" : "camera-toggle"} onClick={() => cameraOn ? stopMedia() : void startCamera()}>{cameraOn ? <><CameraOff size={13}/> Stop</> : <><Camera size={13}/> Enable</>}</button></div><label className="avatar-consent"><input type="checkbox" checked={permission} onChange={(event) => setPermission(event.target.checked)}/> I own this photo or have permission from the person pictured.</label>{cameraError && <p className="live-call-error" role="alert">{cameraError}</p>}</div>
+          <div className="live-call-block"><label className="live-call-label">3. Enable camera and microphone</label><div className="camera-permission-row"><span className="camera-icon"><Camera size={18}/></span><span><strong>Camera + microphone</strong><small>Face, upper-body pose and raised-hand landmarks drive live avatar response.</small></span><button type="button" className={cameraOn ? "camera-toggle on" : "camera-toggle"} onClick={() => cameraOn ? stopMedia() : void startCamera()}>{cameraOn ? <><CameraOff size={13}/> Stop</> : <><Camera size={13}/> Enable</>}</button></div><label className="avatar-consent"><input type="checkbox" checked={permission} onChange={(event) => setPermission(event.target.checked)}/> I own this photo or have permission from the person pictured.</label>{cameraError && <p className="live-call-error" role="alert">{cameraError}</p>}</div>
           <button type="button" className="live-call-preview-btn" disabled={!photo || !permission || !cameraOn} onClick={() => setStage("preview")}>Open live avatar preview <Video size={15}/></button>
           {!signedIn && <p className="live-call-hint"><LockKeyhole size={13}/> Sign in to create or join calls.</p>}
           {signedIn && !ready && <p className="live-call-hint">Select a photo, confirm permission and enable your devices.</p>}
@@ -455,11 +488,11 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           <div className="live-call-avatar-preview live-call-canvas-wrap"><canvas ref={canvasRef} width={640} height={640} aria-label="Live avatar canvas preview"/><div className="preview-type-label">{mode === "full" ? "FULL-BODY AVATAR" : "HALF-BODY AVATAR"}</div></div>
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Camera size={13}/> Camera source</span><b className={cameraOn ? "camera-live" : ""}>{cameraOn ? "CAMERA ON" : "CAMERA OFF"}</b></div><video ref={videoRef} muted playsInline autoPlay/>{!cameraOn && <div className="camera-preview-empty"><VideoOff size={22}/><span>Enable camera and microphone to begin</span></div>}</div>
           <div className="live-call-capabilities">
-            <div><ScanFace size={15}/><span><strong>Face tracking</strong><small>{tracking ? "Face detected · head position, tilt and mouth opening are tracking." : cameraOn ? "Looking for a face in the camera." : "Waiting for camera permission."}</small></span></div>
+            <div><ScanFace size={15}/><span><strong>Face + body tracking</strong><small>{tracking ? "Face detected · head, shoulders, torso lean and raised-hand gestures are tracking." : cameraOn ? "Looking for your face and upper-body pose." : "Waiting for camera permission."}</small></span></div>
             <div><Volume2 size={15}/><span><strong>Voice activity</strong><small>{micOn ? "Microphone active · level " + micLevel + "%." : "Enable your microphone to drive the talking cue."}</small></span></div>
             <div><MonitorUp size={15}/><span><strong>OBS stream</strong><small>{obsOn ? "Canvas capture stream active at 30 FPS." : "Start the canvas stream for OBS capture."}</small></span></div>
           </div>
-          {stage === "preview" && <div className="live-call-notice" role="status"><CheckCircle2 size={16}/> Webcam landmarks now drive head movement, tilt, scale and mouth opening. This is a 2D photo puppet, not full 3D facial reenactment or phoneme-perfect lip sync.</div>}
+          {stage === "preview" && <div className="live-call-notice" role="status"><CheckCircle2 size={16}/> Webcam face and upper-body landmarks now drive head position, tilt, scale, mouth opening, torso lean and raised-hand gesture response. A single flat photo still cannot independently articulate hidden arms or reproduce every expression; that requires a segmented, rigged avatar.</div>}
           <div className="live-call-call-actions">
             {!inCall ? <button type="button" className="live-call-preview-btn" disabled={!ready} onClick={() => void createCall()}><Phone size={15}/> Create call + invite link</button> : <button type="button" className="live-call-preview-btn" onClick={() => void endCall()}><PhoneOff size={15}/> End call</button>}
             {hasInvite && !inCall && <button type="button" className="live-call-preview-btn" disabled={!ready} onClick={() => void joinCall()}><Link2 size={15}/> Join invited call</button>}
