@@ -18,6 +18,17 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    const { data: room, error: roomError } = await admin
+      .from("veyra_call_rooms")
+      .select("id,status,expires_at")
+      .eq("id", roomId)
+      .maybeSingle();
+    if (roomError || !room) {
+      return NextResponse.json({ error: "This call room does not exist." }, { status: 404 });
+    }
+    if (room.status === "ended" || new Date(room.expires_at).getTime() <= Date.now()) {
+      return NextResponse.json({ error: "This call has ended or expired." }, { status: 410 });
+    }
     const { data: membership, error: membershipError } = await admin
       .from("veyra_call_participants")
       .select("room_id")
