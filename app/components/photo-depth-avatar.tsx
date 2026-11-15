@@ -13,6 +13,8 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
   const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const handsRef = useRef<{ left: Landmark[] | null; right: Landmark[] | null }>({ left: null, right: null });
+  const handVisualsRef = useRef<{ left: THREE.Group; right: THREE.Group } | null>(null);
   const [status, setStatus] = useState("Waiting for photo");
   const [progress, setProgress] = useState(0);
   const [modelReady, setModelReady] = useState(false);
@@ -20,6 +22,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
 
   useEffect(() => {
     expressionRef.current.mouth = Math.max(0, Math.min(1, mouthOpen));
+    handsRef.current = { left: leftHand ?? null, right: rightHand ?? null };
     const hands = [leftHand, rightHand].filter(Boolean) as Landmark[][];
     expressionRef.current.hand = hands.length ? hands.reduce((sum, hand) => sum + Math.max(0, 0.5 - hand[0].y), 0) / hands.length : 0;
     if (face?.length) {
@@ -50,8 +53,35 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
     controls.enableDamping = true; controls.dampingFactor = 0.075; controls.minDistance = 1.7; controls.maxDistance = 6;
     controlsRef.current = controls;
     scene.add(new THREE.AmbientLight(0xffffff, 1.65));
+    const makeHand = (color: number) => {
+      const group = new THREE.Group();
+      const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
+      const jointMaterial = new THREE.MeshBasicMaterial({ color });
+      const edges = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+      for (const [a,b] of edges) {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute([0,0,0,0,0,0],3));
+        group.add(new THREE.Line(geometry, material));
+      }
+      for (let i=0;i<21;i++) { const joint = new THREE.Mesh(new THREE.SphereGeometry(0.009,6,6),jointMaterial); group.add(joint); }
+      scene.add(group); return group;
+    };
+    handVisualsRef.current = { left: makeHand(0x80d8ff), right: makeHand(0xc4a7ff) };
     const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(-1, 2, 3); scene.add(key);
     const animate = () => {
+      const handVisuals = handVisualsRef.current;
+      if (handVisuals) {
+        for (const side of ["left","right"] as const) {
+          const points = handsRef.current[side]; const group = handVisuals[side]; group.visible = Boolean(points?.length === 21);
+          if (points?.length === 21) {
+            const aspect = 1.0;
+            for (let i=0;i<21;i++) { const point=points[i]; const joint=group.children[21+i] as THREE.Mesh; joint.position.set((0.5-point.x)*aspect,0.5-point.y,0.28); }
+            let edgeIndex=0;
+            const edges = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+            for (const [a,b] of edges) { const line=group.children[edgeIndex++] as THREE.Line; const pa=points[a],pb=points[b]; const attr=line.geometry.getAttribute("position") as THREE.BufferAttribute; attr.setXYZ(0,(0.5-pa.x)*aspect,0.5-pa.y,0.28); attr.setXYZ(1,(0.5-pb.x)*aspect,0.5-pb.y,0.28); attr.needsUpdate=true; line.geometry.computeBoundingSphere(); }
+          }
+        }
+      }
       const mesh = meshRef.current;
       if (mesh) {
         const e = expressionRef.current;
@@ -74,6 +104,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     return () => {
       cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
+      if (handVisualsRef.current) { for (const group of [handVisualsRef.current.left, handVisualsRef.current.right]) { scene.remove(group); group.children.forEach((child) => { const object=child as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material }; object.geometry?.dispose(); }); } handVisualsRef.current=null; }
       meshRef.current?.geometry.dispose();
       const material = meshRef.current?.material as THREE.Material | undefined; material?.dispose();
       renderer.dispose(); renderer.domElement.remove(); rendererRef.current = null; sceneRef.current = null; meshRef.current = null; onCanvasReady?.(null);
