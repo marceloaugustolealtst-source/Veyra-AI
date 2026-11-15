@@ -22,6 +22,7 @@ export default function Home() {
   const [generatedImage, setGeneratedImage] = useState("");
   const [creations, setCreations] = useState<Creation[]>([]);
   const [account, setAccount] = useState<{ email: string; name: string; credits: number } | null>(null);
+  const [accountError, setAccountError] = useState(false);
   type Notification = { id: string; notification_type: string; title: string; message: string; related_id: string | null; read_at: string | null; created_at: string };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -54,14 +55,24 @@ export default function Home() {
     let active = true;
     const loadAccount = async (user: { id: string; email?: string; user_metadata?: { full_name?: string } } | null) => {
       if (!user) { if (active) setAccount(null); return; }
-      const accountResponse = await fetch("/api/account", { cache: "no-store" });
+      let accountResponse = await fetch("/api/account", { cache: "no-store", credentials: "same-origin" });
+      if (accountResponse.status === 401) {
+        await supabase.auth.refreshSession();
+        accountResponse = await fetch("/api/account", { cache: "no-store", credentials: "same-origin" });
+      }
       if (!accountResponse.ok) {
-        if (active) setAccount({ email: user.email ?? "", name: String(user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: 0 });
+        if (active) {
+          setAccount((current) => current?.email.toLowerCase() === (user.email ?? "").toLowerCase()
+            ? current
+            : { email: user.email ?? "", name: String(user.user_metadata?.full_name ?? user.email ?? "Your account"), credits: 0 });
+          setAccountError(true);
+        }
         return;
       }
       const accountData = await accountResponse.json() as { email?: string; name?: string; credits?: number };
       if (!active) return;
       setAccount({ email: accountData.email ?? user.email ?? "", name: accountData.name ?? user.email ?? "Your account", credits: Number(accountData.credits ?? 0) });
+      setAccountError(false);
       const historyResponse = await fetch("/api/creations");
       if (historyResponse.ok) {
         const history = await historyResponse.json() as { creations?: Array<{ id: string; generationId: string | null; createdAt: string; mediaType: "image" | "video"; mediaUrl: string }> };
@@ -78,7 +89,7 @@ export default function Home() {
     const refreshWallet = async () => {
       try {
         const response = await fetch("/api/account", { cache: "no-store" });
-        if (!response.ok) return;
+        if (!response.ok) { setAccountError(true); return; }
         const data = await response.json() as { email?: string; name?: string; credits?: number };
         setAccount((current) => current ? {
           ...current,
@@ -86,7 +97,8 @@ export default function Home() {
           name: data.name ?? current.name,
           credits: Number(data.credits ?? current.credits),
         } : current);
-      } catch { /* Keep the last confirmed balance until the server responds. */ }
+        setAccountError(false);
+      } catch { setAccountError(true); /* Keep the last confirmed balance until the server responds. */ }
     };
     const timer = window.setInterval(() => { void refreshWallet(); }, 15000);
     window.addEventListener("focus", refreshWallet);
@@ -168,7 +180,7 @@ export default function Home() {
           <a href="#creations"><Aperture size={19}/><span>Library</span></a>
           <a href="#settings"><Settings2 size={19}/><span>Account</span></a>
         </nav>
-        <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{account ? account.credits.toLocaleString() : 0} credits</b></span><div className="notification-wrap">
+        <header className="topbar"><div className="crumb">Workspace <span style={{color:"#55596a"}}>/</span> Overview</div><div className="top-actions">{account?.email.toLowerCase() === "hoangthi3000@gmail.com" && <a className="account-link" href="/admin">Admin credits</a>}{account ? <button className="account-link" type="button" onClick={handleSignOut}><LogOut size={13} style={{display:"inline",verticalAlign:"-2px"}}/> Sign out</button> : <a className="account-link" href="/auth">Sign in / Create account</a>}<span className="credit-pill"><Zap size={13} style={{display:"inline",verticalAlign:"-2px",color:"#c5aaff"}}/> <b>{accountError ? "Balance unavailable" : account ? account.credits.toLocaleString() + " credits" : "0 credits"}</b></span><div className="notification-wrap">
             <button className={"icon-btn notification-button " + (notificationShake ? "notification-shake" : "")} aria-label={"Notifications, " + notifications.filter(item => !item.read_at).length + " unread"} aria-expanded={notificationsOpen} type="button" onClick={() => { setNotificationsOpen(open => !open); setNotificationShake(false); }}>
               <Bell size={16}/>{notifications.some(item => !item.read_at) && <span className="notification-dot" />}
             </button>
@@ -202,7 +214,7 @@ export default function Home() {
         </section>
         <section id="plans" className="account-info-section">
           <div className="section-head"><h2>Free credits</h2></div>
-          <div className="account-info-card"><strong>{account ? account.credits.toLocaleString() : "Sign in"} credits available</strong><p>Veyra is free to use. Every new account starts with 500 free credits. Credits are free usage units for image generation, photo editing and video creation. A 30-second video uses 10 credits. No subscriptions, purchases or payment details are required.</p></div>
+          <div className="account-info-card"><strong>{accountError ? "Balance temporarily unavailable" : account ? account.credits.toLocaleString() + " credits available" : "Sign in to view credits"}</strong><p>Veyra is free to use. Every new account starts with 500 free credits. Credits are free usage units for image generation, photo editing and video creation. A 30-second video uses 10 credits. No subscriptions, purchases or payment details are required.</p></div>
         </section>
         <section id="settings" className="account-info-section">
           <div className="section-head"><h2>Account settings</h2></div>
