@@ -89,6 +89,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [leftHandTrack, setLeftHandTrack] = useState<FacePoint[] | null>(null);
   const [rightHandTrack, setRightHandTrack] = useState<FacePoint[] | null>(null);
   const [mouthOpenTrack, setMouthOpenTrack] = useState(0);
+  const [depthCanvas, setDepthCanvas] = useState<HTMLCanvasElement | null>(null);
+  const avatarStreamRef = useRef<MediaStream | null>(null);
   const [rigReady, setRigReady] = useState(false);
   const [segmentationStatus, setSegmentationStatus] = useState("Preparing photo mask…");
   const [stage, setStage] = useState<"setup" | "preview">("setup");
@@ -141,6 +143,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       try { await meteredPeer.close("call ended"); } catch { /* The SDK may already be closed. */ }
     }
     remoteStreamRef.current?.getTracks().forEach((track) => track.stop());
+    avatarStreamRef.current?.getTracks().forEach((track) => track.stop());
+    avatarStreamRef.current = null;
     remoteStreamRef.current = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     roomIdRef.current = "";
@@ -164,6 +168,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     if (videoRef.current) videoRef.current.srcObject = null;
     obsStreamRef.current?.getTracks().forEach((track) => track.stop());
     obsStreamRef.current = null;
+    avatarStreamRef.current?.getTracks().forEach((track) => track.stop());
+    avatarStreamRef.current = null;
     if (obsVideoRef.current) obsVideoRef.current.srcObject = null;
     setCameraOn(false);
     setMicOn(false);
@@ -248,6 +254,11 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     ctx.clearRect(0, 0, width, height);
     if (avatarBackground === "studio") { ctx.fillStyle = "#0b0d15"; ctx.fillRect(0, 0, width, height); }
     else if (avatarBackground === "green") { ctx.fillStyle = "#00ff00"; ctx.fillRect(0, 0, width, height); }
+    if (depthCanvas) {
+      ctx.drawImage(depthCanvas, 0, 0, width, height);
+      drawFrameRef.current = requestAnimationFrame(drawAvatar);
+      return;
+    }
     if (image) {
       const motion = motionRef.current;
       const source = segmentedPhotoRef.current ?? image;
@@ -300,7 +311,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       ctx.fillText("Upload a photo to create your avatar preview", width / 2, height / 2);
     }
     drawFrameRef.current = requestAnimationFrame(drawAvatar);
-  }, [mode, avatarBackground]);
+  }, [mode, avatarBackground, depthCanvas]);
 
   useEffect(() => {
     drawFrameRef.current = requestAnimationFrame(drawAvatar);
@@ -500,8 +511,14 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }
 
   async function connectRoom(roomId: string, host: boolean) {
-    const localStream = streamRef.current;
-    if (!localStream) throw new Error("Enable your camera and microphone before connecting.");
+    const sourceStream = streamRef.current;
+    if (!sourceStream) throw new Error("Enable your camera and microphone before connecting.");
+    const avatarCanvas = canvasRef.current;
+    if (!avatarCanvas?.captureStream) throw new Error("Avatar video output is unavailable in this browser.");
+    avatarStreamRef.current?.getTracks().forEach((track) => track.stop());
+    const avatarVideo = avatarCanvas.captureStream(30);
+    const localStream = new MediaStream([...avatarVideo.getVideoTracks(), ...sourceStream.getAudioTracks()]);
+    avatarStreamRef.current = localStream;
     roomIdRef.current = roomId;
     setCallStatus(host ? "Connecting to secure call…" : "Joining secure call…");
     const meteredPeer = new MeteredPeer({
@@ -613,7 +630,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         <div className="live-call-preview-column">
           <div className="live-call-preview-title"><strong>Live animated avatar</strong><span><i/> LOCAL PREVIEW</span></div>
           <div className="live-call-avatar-preview live-call-canvas-wrap"><canvas ref={canvasRef} width={640} height={640} aria-label="Live avatar canvas preview"/><div className="preview-type-label">{mode === "full" ? "FULL-BODY AVATAR" : "HALF-BODY AVATAR"}</div></div>
-          {photo && <PhotoDepthAvatar photo={photo} face={faceTrack} leftHand={leftHandTrack} rightHand={rightHandTrack} mouthOpen={mouthOpenTrack} />}
+          {photo && <PhotoDepthAvatar photo={photo} face={faceTrack} leftHand={leftHandTrack} rightHand={rightHandTrack} mouthOpen={mouthOpenTrack} onCanvasReady={setDepthCanvas} />}
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Camera size={13}/> Camera source</span><b className={cameraOn ? "camera-live" : ""}>{cameraOn ? "CAMERA ON" : "CAMERA OFF"}</b></div><video ref={videoRef} muted playsInline autoPlay/>{!cameraOn && <div className="camera-preview-empty"><VideoOff size={22}/><span>Enable camera and microphone to begin</span></div>}</div>
           <div className="live-call-capabilities">
             <div><ScanFace size={15}/><span><strong>Face + body tracking</strong><small>{tracking ? "Face detected · head, shoulders, torso lean and raised-hand gestures are tracking." : cameraOn ? "Looking for your face and upper-body pose." : "Waiting for camera permission."}</small></span></div>
