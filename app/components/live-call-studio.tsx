@@ -86,6 +86,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [micLevel, setMicLevel] = useState(0);
   const [tracking, setTracking] = useState(false);
   const [faceTrack, setFaceTrack] = useState<FacePoint[] | null>(null);
+  const [sourceFaceTrack, setSourceFaceTrack] = useState<FacePoint[] | null>(null);
   const [leftHandTrack, setLeftHandTrack] = useState<FacePoint[] | null>(null);
   const [rightHandTrack, setRightHandTrack] = useState<FacePoint[] | null>(null);
   const [mouthOpenTrack, setMouthOpenTrack] = useState(0);
@@ -229,7 +230,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
             tracker.onResults(resolve);
             try { await tracker.send({ image }); } catch (error) { reject(error); }
           });
-          if (!cancelled) { sourcePoseRef.current = sourceResult.poseLandmarks ?? null; sourceFaceRef.current = sourceResult.faceLandmarks ?? null; }
+          if (!cancelled) { sourcePoseRef.current = sourceResult.poseLandmarks ?? null; sourceFaceRef.current = sourceResult.faceLandmarks ?? null; setSourceFaceTrack(sourceResult.faceLandmarks ?? null); }
           tracker.close();
         }
         if (!cancelled) {
@@ -630,7 +631,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         <div className="live-call-preview-column">
           <div className="live-call-preview-title"><strong>Live animated avatar</strong><span><i/> LOCAL PREVIEW</span></div>
           <div className="live-call-avatar-preview live-call-canvas-wrap"><canvas ref={canvasRef} width={640} height={640} aria-label="Live avatar canvas preview"/><div className="preview-type-label">{mode === "full" ? "FULL-BODY AVATAR" : "HALF-BODY AVATAR"}</div></div>
-          {photo && <PhotoDepthAvatar photo={photo} face={faceTrack} leftHand={leftHandTrack} rightHand={rightHandTrack} mouthOpen={mouthOpenTrack} onCanvasReady={setDepthCanvas} />}
+          {photo && <PhotoDepthAvatar photo={photo} sourceFace={sourceFaceTrack} face={faceTrack} leftHand={leftHandTrack} rightHand={rightHandTrack} mouthOpen={mouthOpenTrack} onCanvasReady={setDepthCanvas} />}
           <div className="live-call-camera-preview"><div className="camera-preview-heading"><span><Camera size={13}/> Camera source</span><b className={cameraOn ? "camera-live" : ""}>{cameraOn ? "CAMERA ON" : "CAMERA OFF"}</b></div><video ref={videoRef} muted playsInline autoPlay/>{!cameraOn && <div className="camera-preview-empty"><VideoOff size={22}/><span>Enable camera and microphone to begin</span></div>}</div>
           <div className="live-call-capabilities">
             <div><ScanFace size={15}/><span><strong>Face + body tracking</strong><small>{tracking ? "Face detected · head, shoulders, torso lean and raised-hand gestures are tracking." : cameraOn ? "Looking for your face and upper-body pose." : "Waiting for camera permission."}</small></span></div>
