@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://veyra-gu0bla83x-financedigital.vercel.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://veyra-ai-financedigital.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
