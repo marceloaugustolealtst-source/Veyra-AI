@@ -243,3 +243,6 @@
 .live-call-error{padding:10px 12px;border:1px solid #fb71854d;border-radius:9px;background:#fb718510;color:#ff9aa9;font-size:11px;line-height:1.5}
 .live-call-hint{line-height:1.5}
 @media(max-width:560px){.live-call-call-actions{grid-template-columns:1fr}.live-call-camera-preview video{min-height:120px}}
+
+/* OBS Studio setup steps */
+.obs-steps{margin:13px 0 0;padding-left:19px;display:grid;gap:8px;color:#a7a9b8;font-size:10px;line-height:1.55}.obs-steps b{color:#e8e2f5}.obs-steps li::marker{color:#b69aff}
