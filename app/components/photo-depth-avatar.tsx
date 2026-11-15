@@ -25,7 +25,7 @@ export default function PhotoDepthAvatar({ photo, face, leftHand, rightHand, mou
     if (face?.length) {
       const leftEye = face[159], leftLow = face[145], rightEye = face[386], rightLow = face[374];
       if (leftEye && leftLow && rightEye && rightLow) {
-        expressionRef.current.blink = Math.max(0, Math.min(1, 1 - ((Math.abs(leftLow.y-leftEye.y)+Math.abs(rightLow.y-rightEye.y))*18));
+        expressionRef.current.blink = Math.max(0, Math.min(1, 1 - (Math.abs(leftLow.y-leftEye.y) + Math.abs(rightLow.y-rightEye.y)) * 18));
       }
       const left = face[33], right = face[263];
       if (left && right) expressionRef.current.lean = Math.atan2(right.y-left.y,right.x-left.x);
