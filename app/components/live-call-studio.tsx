@@ -19,9 +19,42 @@ type HolisticInstance = {
   close(): void;
 };
 type HolisticConstructor = new (options: { locateFile: (file: string) => string }) => HolisticInstance;
+type SegmentationResult = { segmentationMask?: HTMLCanvasElement | HTMLImageElement };
+type SelfieSegmentationInstance = { setOptions(options: Record<string, unknown>): void; onResults(callback: (results: SegmentationResult) => void): void; send(input: { image: HTMLImageElement }): Promise<void>; close(): void; };
+type SelfieSegmentationConstructor = new (options: { locateFile: (file: string) => string }) => SelfieSegmentationInstance;
+
 type SpeechRecognitionInstance = { continuous: boolean; interimResults: boolean; lang: string; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null; start(): void; stop(): void; };
 
-declare global { interface Window { Holistic?: HolisticConstructor; SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance } }
+declare global { interface Window { Holistic?: HolisticConstructor; SelfieSegmentation?: SelfieSegmentationConstructor; SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance } }
+
+
+let segmentationLoader: Promise<void> | null = null;
+function loadSelfieSegmentation() {
+  if (typeof window === "undefined") return Promise.reject(new Error("Photo segmentation requires a browser."));
+  if (window.SelfieSegmentation) return Promise.resolve();
+  if (!segmentationLoader) segmentationLoader = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js";
+    script.async = true;
+    script.onload = () => window.SelfieSegmentation ? resolve() : reject(new Error("Segmentation model did not initialize."));
+    script.onerror = () => reject(new Error("Could not load the photo segmentation model."));
+    document.head.appendChild(script);
+  });
+  return segmentationLoader;
+}
+const RIG_POSE_INDICES = [0,11,12,13,14,15,16,23,24,25,26,27,28];
+function drawWarpTriangle(ctx: CanvasRenderingContext2D, image: CanvasImageSource, src: [number,number][], dst: [number,number][]) {
+  const [a,b,c]=src, [A,B,C]=dst;
+  const den=a[0]*(b[1]-c[1])+b[0]*(c[1]-a[1])+c[0]*(a[1]-b[1]);
+  if (Math.abs(den)<0.001) return;
+  const m11=(A[0]*(b[1]-c[1])+B[0]*(c[1]-a[1])+C[0]*(a[1]-b[1]))/den;
+  const m12=(A[0]*(c[0]-b[0])+B[0]*(a[0]-c[0])+C[0]*(b[0]-a[0]))/den;
+  const m21=(A[1]*(b[1]-c[1])+B[1]*(c[1]-a[1])+C[1]*(a[1]-b[1]))/den;
+  const m22=(A[1]*(c[0]-b[0])+B[1]*(a[0]-c[0])+C[1]*(b[0]-a[0]))/den;
+  const dx=A[0]-m11*a[0]-m12*a[1], dy=A[1]-m21*a[0]-m22*a[1];
+  ctx.save(); ctx.beginPath(); ctx.moveTo(dst[0][0],dst[0][1]); ctx.lineTo(dst[1][0],dst[1][1]); ctx.lineTo(dst[2][0],dst[2][1]); ctx.closePath(); ctx.clip();
+  ctx.setTransform(m11,m21,m12,m22,dx,dy); ctx.drawImage(image,0,0); ctx.restore();
+}
 
 let holisticLoader: Promise<void> | null = null;
 function loadHolistic() {
@@ -50,6 +83,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const [cameraError, setCameraError] = useState("");
   const [micLevel, setMicLevel] = useState(0);
   const [tracking, setTracking] = useState(false);
+  const [rigReady, setRigReady] = useState(false);
+  const [segmentationStatus, setSegmentationStatus] = useState("Preparing photo mask…");
   const [stage, setStage] = useState<"setup" | "preview">("setup");
   const [inviteUrl, setInviteUrl] = useState("");
   const [callStatus, setCallStatus] = useState("No call connected");
@@ -66,6 +101,9 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const segmentedPhotoRef = useRef<HTMLCanvasElement | null>(null);
+  const sourcePoseRef = useRef<FacePoint[] | null>(null);
+  const livePoseRef = useRef<FacePoint[] | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const drawFrameRef = useRef<number>(0);
   const audioFrameRef = useRef<number>(0);
@@ -138,10 +176,57 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!photo) { imageRef.current = null; return; }
+    if (!photo) { imageRef.current = null; segmentedPhotoRef.current = null; sourcePoseRef.current = null; setRigReady(false); return; }
+    let cancelled = false;
     const image = new Image();
-    image.onload = () => { imageRef.current = image; };
+    image.onload = async () => {
+      if (cancelled) return;
+      imageRef.current = image; setRigReady(false); setSegmentationStatus("Separating person from background…");
+      const cutout = document.createElement("canvas");
+      cutout.width = image.naturalWidth; cutout.height = image.naturalHeight;
+      const cutoutContext = cutout.getContext("2d");
+      if (!cutoutContext) return;
+      try {
+        await loadSelfieSegmentation();
+        const Segmentation = window.SelfieSegmentation;
+        if (!Segmentation) throw new Error("Segmentation model unavailable.");
+        const segmenter = new Segmentation({ locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/" + file });
+        segmenter.setOptions({ modelSelection: 1 });
+        const maskResult = await new Promise<SegmentationResult>(async (resolve, reject) => {
+          segmenter.onResults(resolve);
+          try { await segmenter.send({ image }); } catch (error) { reject(error); }
+        });
+        if (cancelled) { segmenter.close(); return; }
+        cutoutContext.drawImage(image,0,0,cutout.width,cutout.height);
+        if (maskResult.segmentationMask) {
+          cutoutContext.globalCompositeOperation = "destination-in";
+          cutoutContext.drawImage(maskResult.segmentationMask,0,0,cutout.width,cutout.height);
+          cutoutContext.globalCompositeOperation = "source-over";
+        }
+        segmentedPhotoRef.current = cutout; segmenter.close();
+        setSegmentationStatus("Person cutout ready · building pose rig…");
+        await loadHolistic();
+        const Holistic = window.Holistic;
+        if (Holistic) {
+          const tracker = new Holistic({ locateFile: (file) => "https://cdn.jsdelivr.net/npm/@mediapipe/holistic/" + file });
+          tracker.setOptions({ modelComplexity:1, smoothLandmarks:false, enableSegmentation:false, refineFaceLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+          const sourceResult = await new Promise<HolisticResult>(async (resolve,reject) => {
+            tracker.onResults(resolve);
+            try { await tracker.send({ image }); } catch (error) { reject(error); }
+          });
+          if (!cancelled) sourcePoseRef.current = sourceResult.poseLandmarks ?? null;
+          tracker.close();
+        }
+        if (!cancelled) {
+          setRigReady(Boolean(sourcePoseRef.current?.length));
+          setSegmentationStatus(sourcePoseRef.current?.length ? "Background removed · 2D body rig ready." : "Background removed · clearer visible shoulders and arms improve rigging.");
+        }
+      } catch {
+        if (!cancelled) { segmentedPhotoRef.current = null; setSegmentationStatus("Automatic cutout unavailable · original photo retained."); }
+      }
+    };
     image.src = photo;
+    return () => { cancelled = true; };
   }, [photo]);
 
   const drawAvatar = useCallback(() => {
@@ -156,22 +241,39 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     ctx.fillRect(0, 0, width, height);
     if (image) {
       const motion = motionRef.current;
+      const source = segmentedPhotoRef.current ?? image;
       const ratio = Math.min(width / image.width, height / image.height) * (mode === "full" ? 0.92 : 1.12) * motion.scale;
       const w = image.width * ratio, h = image.height * ratio;
-      ctx.save();
-      ctx.translate(width / 2 + motion.x + motion.lean * 7, height / 2 + motion.y - motion.handLift * 5);
-      ctx.rotate(motion.tilt + motion.lean * 0.012);
-      ctx.drawImage(image, -w / 2, -h / 2, w, h);
-      const speech = speechMouthRef.current;
-      const mouth = Math.max(motion.mouth * 0.72, Math.min(1, levelRef.current * 1.8), speech.open);
-      if (mouth > 0.07) {
-        const mouthY = h * (mode === "full" ? 0.245 : 0.315);
-        ctx.fillStyle = "#35131c";
-        ctx.beginPath();
-        ctx.ellipse(0, -h / 2 + mouthY, Math.max(6, w * 0.018) * speech.width, 1.5 + mouth * 13, 0, 0, Math.PI * 2);
-        ctx.fill();
+      const left = width/2-w/2+motion.x+motion.lean*7, top = height/2-h/2+motion.y-motion.handLift*5;
+      const base = (gx:number,gy:number):[number,number] => [left+gx*w,top+gy*h];
+      const anchors = sourcePoseRef.current, live = livePoseRef.current;
+      if (segmentedPhotoRef.current && anchors?.length && live?.length) {
+        const cols=22, rows=22;
+        const moved = (gx:number,gy:number):[number,number] => {
+          let dx=0,dy=0,total=0;
+          for (const index of RIG_POSE_INDICES) {
+            const a=anchors[index], b=live[index];
+            if (!a || !b || (a.visibility ?? 1)<0.35 || (b.visibility ?? 1)<0.35) continue;
+            const d2=(gx-a.x)*(gx-a.x)+(gy-a.y)*(gy-a.y), weight=Math.exp(-d2/0.012);
+            dx+=(b.x-a.x)*w*weight; dy+=(b.y-a.y)*h*weight; total+=weight;
+          }
+          const gain=total>0 ? Math.min(2.8, 2.8*total/(total+0.65)) : 0;
+          return [left+gx*w+(total ? dx/total*gain : 0),top+gy*h+(total ? dy/total*gain : 0)];
+        };
+        for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) {
+          const x0=x/cols,y0=y/rows,x1=(x+1)/cols,y1=(y+1)/rows;
+          drawWarpTriangle(ctx,source,[base(x0,y0),base(x1,y0),base(x1,y1)],[moved(x0,y0),moved(x1,y0),moved(x1,y1)]);
+          drawWarpTriangle(ctx,source,[base(x0,y0),base(x1,y1),base(x0,y1)],[moved(x0,y0),moved(x1,y1),moved(x0,y1)]);
+        }
+      } else {
+        ctx.save(); ctx.translate(width/2+motion.x+motion.lean*7,height/2+motion.y-motion.handLift*5);
+        ctx.rotate(motion.tilt+motion.lean*0.012); ctx.drawImage(source,-w/2,-h/2,w,h); ctx.restore();
       }
-      ctx.restore();
+      const speech=speechMouthRef.current, mouth=Math.max(motion.mouth*0.72,Math.min(1,levelRef.current*1.8),speech.open);
+      if(mouth>0.07 && !segmentedPhotoRef.current) {
+        ctx.fillStyle="#35131c"; ctx.beginPath();
+        ctx.ellipse(width/2+motion.x,top+h*(mode==="full"?0.245:0.315),Math.max(6,w*0.018)*speech.width,1.5+mouth*13,0,0,Math.PI*2); ctx.fill();
+      }
     } else {
       ctx.fillStyle = "#a78bfa";
       ctx.font = "14px sans-serif";
@@ -262,6 +364,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       holistic.onResults((results) => {
         const points = results.faceLandmarks;
         const pose = results.poseLandmarks;
+        livePoseRef.current = pose ?? null;
         if (!points) { setTracking(false); return; }
         const leftEye = points[33], rightEye = points[263], forehead = points[10], chin = points[152];
         const mouthTop = points[13], mouthBottom = points[14], mouthLeft = points[61], mouthRight = points[291];
@@ -476,7 +579,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           <div className="live-call-block"><label className="live-call-label">1. Choose avatar framing</label><div className="avatar-mode-options">
             <button type="button" className={mode === "full" ? "chosen" : ""} onClick={() => setMode("full")}><span className="avatar-mode-art full-art"><UserRound size={35}/></span><strong>Full body</strong><small>Portrait framing</small></button>
             <button type="button" className={mode === "half" ? "chosen" : ""} onClick={() => setMode("half")}><span className="avatar-mode-art half-art"><ScanFace size={35}/></span><strong>Half body</strong><small>Face and shoulders</small></button>
-          </div><p className="live-call-hint"><Info size={13}/> A clear front-facing portrait works best.</p></div>
+          </div><p className="live-call-hint"><Info size={13}/> A clear front-facing portrait with visible shoulders and arms works best. Background cutout and body rig are prepared after upload.</p></div>
           <div className="live-call-block"><label className="live-call-label">2. Upload your avatar photo</label><button type="button" className="avatar-upload" onClick={() => fileRef.current?.click()}>{photo ? <img src={photo} alt="Selected avatar"/> : <span className="avatar-upload-empty"><ImagePlus size={25}/><strong>Choose an avatar photo</strong><small>JPG, PNG or WebP · up to 12 MB</small></span>}{photo && <span className="avatar-upload-overlay">Change photo</span>}</button><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => choosePhoto(event.target.files?.[0])}/>{photoName && <div className="avatar-file-name">{photoName}</div>}</div>
           <div className="live-call-block"><label className="live-call-label">3. Enable camera and microphone</label><div className="camera-permission-row"><span className="camera-icon"><Camera size={18}/></span><span><strong>Camera + microphone</strong><small>Face, upper-body pose and raised-hand landmarks drive live avatar response.</small></span><button type="button" className={cameraOn ? "camera-toggle on" : "camera-toggle"} onClick={() => cameraOn ? stopMedia() : void startCamera()}>{cameraOn ? <><CameraOff size={13}/> Stop</> : <><Camera size={13}/> Enable</>}</button></div><label className="avatar-consent"><input type="checkbox" checked={permission} onChange={(event) => setPermission(event.target.checked)}/> I own this photo or have permission from the person pictured.</label>{cameraError && <p className="live-call-error" role="alert">{cameraError}</p>}</div>
           <button type="button" className="live-call-preview-btn" disabled={!photo || !permission || !cameraOn} onClick={() => setStage("preview")}>Open live avatar preview <Video size={15}/></button>
@@ -492,7 +595,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
             <div><Volume2 size={15}/><span><strong>Voice activity</strong><small>{micOn ? "Microphone active · level " + micLevel + "%." : "Enable your microphone to drive the talking cue."}</small></span></div>
             <div><MonitorUp size={15}/><span><strong>OBS stream</strong><small>{obsOn ? "Canvas capture stream active at 30 FPS." : "Start the canvas stream for OBS capture."}</small></span></div>
           </div>
-          {stage === "preview" && <div className="live-call-notice" role="status"><CheckCircle2 size={16}/> Webcam face and upper-body landmarks now drive head position, tilt, scale, mouth opening, torso lean and raised-hand gesture response. A single flat photo still cannot independently articulate hidden arms or reproduce every expression; that requires a segmented, rigged avatar.</div>}
+          {stage === "preview" && <div className="live-call-notice" role="status"><CheckCircle2 size={16}/> {segmentationStatus} {rigReady ? "Visible body joints are deforming the 2D mesh." : "Use a photo with visible arms and shoulders for stronger rig movement."} Hidden body parts cannot be reconstructed from a single photo.</div>}
           <div className="live-call-call-actions">
             {!inCall ? <button type="button" className="live-call-preview-btn" disabled={!ready} onClick={() => void createCall()}><Phone size={15}/> Create call + invite link</button> : <button type="button" className="live-call-preview-btn" onClick={() => void endCall()}><PhoneOff size={15}/> End call</button>}
             {hasInvite && !inCall && <button type="button" className="live-call-preview-btn" disabled={!ready} onClick={() => void joinCall()}><Link2 size={15}/> Join invited call</button>}
