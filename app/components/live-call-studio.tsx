@@ -5,7 +5,7 @@ import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, Mo
 import { MeteredPeer } from "@metered-ca/realtime";
 
 type AvatarMode = "full" | "half";
-type FacePoint = { x: number; y: number; z?: number };
+type FacePoint = { x: number; y: number; z?: number; visibility?: number };
 type HolisticResult = {
   faceLandmarks?: FacePoint[];
   poseLandmarks?: FacePoint[];
@@ -245,7 +245,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
       const ratio = Math.min(width / image.width, height / image.height) * (mode === "full" ? 0.92 : 1.12) * motion.scale;
       const w = image.width * ratio, h = image.height * ratio;
       const left = width/2-w/2+motion.x+motion.lean*7, top = height/2-h/2+motion.y-motion.handLift*5;
-      const base = (gx:number,gy:number):[number,number] => [left+gx*w,top+gy*h];
+      const sourcePoint = (gx:number,gy:number):[number,number] => [gx*image.width,gy*image.height];
       const anchors = sourcePoseRef.current, live = livePoseRef.current;
       if (segmentedPhotoRef.current && anchors?.length && live?.length) {
         const cols=22, rows=22;
@@ -262,8 +262,8 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
         };
         for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) {
           const x0=x/cols,y0=y/rows,x1=(x+1)/cols,y1=(y+1)/rows;
-          drawWarpTriangle(ctx,source,[base(x0,y0),base(x1,y0),base(x1,y1)],[moved(x0,y0),moved(x1,y0),moved(x1,y1)]);
-          drawWarpTriangle(ctx,source,[base(x0,y0),base(x1,y1),base(x0,y1)],[moved(x0,y0),moved(x1,y1),moved(x0,y1)]);
+          drawWarpTriangle(ctx,source,[sourcePoint(x0,y0),sourcePoint(x1,y0),sourcePoint(x1,y1)],[moved(x0,y0),moved(x1,y0),moved(x1,y1)]);
+          drawWarpTriangle(ctx,source,[sourcePoint(x0,y0),sourcePoint(x1,y1),sourcePoint(x0,y1)],[moved(x0,y0),moved(x1,y1),moved(x0,y1)]);
         }
       } else {
         ctx.save(); ctx.translate(width/2+motion.x+motion.lean*7,height/2+motion.y-motion.handLift*5);
