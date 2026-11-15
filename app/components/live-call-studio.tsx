@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, CheckCircle2, Copy, ImagePlus, Info, LockKeyhole, MonitorUp, Radio, ScanFace, UserRound, Video, VideoOff, Volume2, Phone, PhoneOff, Link2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { MeteredPeer } from "@metered-ca/realtime";
 
 type AvatarMode = "full" | "half";
 type FacePoint = { x: number; y: number; z?: number };
@@ -69,44 +69,29 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   const motionRef = useRef({ x: 0, y: 0, tilt: 0, scale: 1, mouth: 0 });
   const photoUrlRef = useRef("");
   const faceMeshRef = useRef<FaceMeshInstance | null>(null);
-  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
-  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const meteredPeerRef = useRef<MeteredPeer | null>(null);
   const roomIdRef = useRef("");
-  const hostRef = useRef(false);
-  const inviteTokenRef = useRef("");
   const obsStreamRef = useRef<MediaStream | null>(null);
-  const signalQueueRef = useRef<Array<{ kind: string; data?: RTCSessionDescriptionInit | RTCIceCandidateInit }>>([]);
-  const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const faceBusyRef = useRef(false);
   const lastFaceAtRef = useRef(0);
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const speechActiveRef = useRef(false);
   const speechMouthRef = useRef({ open: 0, width: 1 });
 
-  const sendSignal = useCallback(async (kind: string, data?: RTCSessionDescriptionInit | RTCIceCandidateInit) => {
-    const channel = channelRef.current;
-    if (channel) await channel.send({ type: "broadcast", event: "signal", payload: { kind, data } });
-  }, []);
-
   const closeCall = useCallback(async (markEnded = false) => {
     const roomId = roomIdRef.current;
     if (markEnded && roomId) {
       try { await fetch("/api/calls/end", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId }) }); } catch { /* Always complete local teardown. */ }
     }
-    peerRef.current?.close();
-    peerRef.current = null;
+    const meteredPeer = meteredPeerRef.current;
+    meteredPeerRef.current = null;
+    if (meteredPeer) {
+      try { await meteredPeer.close("call ended"); } catch { /* The SDK may already be closed. */ }
+    }
     remoteStreamRef.current?.getTracks().forEach((track) => track.stop());
     remoteStreamRef.current = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
-    if (channelRef.current) {
-      const supabase = createClient();
-      await supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
     roomIdRef.current = "";
-    pendingIceRef.current = [];
-    signalQueueRef.current = [];
-    hostRef.current = false;
     setInCall(false);
     setCallStatus("Call ended");
   }, []);
@@ -141,6 +126,11 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
     void closeCall(true);
     if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
   }, [stopMedia, closeCall]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHasInvite(Boolean(params.get("call") && params.get("invite")));
+  }, []);
 
   useEffect(() => {
     if (!photo) { imageRef.current = null; return; }
@@ -350,69 +340,62 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }
 
   async function connectRoom(roomId: string, host: boolean) {
-    if (!streamRef.current) throw new Error("Enable your camera and microphone before connecting.");
-    const supabase = createClient();
+    const localStream = streamRef.current;
+    if (!localStream) throw new Error("Enable your camera and microphone before connecting.");
     roomIdRef.current = roomId;
-    hostRef.current = host;
-    const channel = supabase.channel("veyra-call:" + roomId, { config: { private: true, broadcast: { ack: true, self: false } } });
-    channelRef.current = channel;
-    channel.on("broadcast", { event: "signal" }, async ({ payload }) => {
-      const signal = payload as { kind?: string; data?: RTCSessionDescriptionInit | RTCIceCandidateInit };
-      const peer = peerRef.current;
-      if (!signal.kind) return;
-      if (signal.kind === "ready" && hostRef.current && peer && !peer.localDescription) {
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        await sendSignal("offer", offer);
-        setCallStatus("Calling invitee…");
-      } else if (signal.kind === "offer" && !hostRef.current && peer && signal.data) {
-        await peer.setRemoteDescription(signal.data as RTCSessionDescriptionInit);
-        for (const candidate of pendingIceRef.current.splice(0)) { try { await peer.addIceCandidate(candidate); } catch { /* Stale candidate. */ } }
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-        await sendSignal("answer", answer);
-        setCallStatus("Connecting call…");
-      } else if (signal.kind === "answer" && hostRef.current && peer && signal.data) {
-        await peer.setRemoteDescription(signal.data as RTCSessionDescriptionInit);
-        for (const candidate of pendingIceRef.current.splice(0)) { try { await peer.addIceCandidate(candidate); } catch { /* Stale candidate. */ } }
-        setCallStatus("Call connected");
-      } else if (signal.kind === "ice" && peer && signal.data) {
-        const candidate = signal.data as RTCIceCandidateInit;
-        if (!peer.remoteDescription) pendingIceRef.current.push(candidate);
-        else { try { await peer.addIceCandidate(candidate); } catch { /* Ignore stale ICE candidates. */ } }
-      } else if (signal.kind === "hangup") {
-        await closeCall();
-      }
+    setCallStatus(host ? "Connecting to secure call…" : "Joining secure call…");
+    const meteredPeer = new MeteredPeer({
+      tokenProvider: async () => {
+        const response = await fetch("/api/calls/metered-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ roomId }),
+        });
+        const data = await response.json() as { token?: string; error?: string };
+        if (!response.ok || !data.token) throw new Error(data.error ?? "Could not authorize the call connection.");
+        return data.token;
+      },
     });
-    await new Promise<void>((resolve, reject) => {
-      channel.subscribe((status, error) => {
-        if (status === "SUBSCRIBED") resolve();
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") reject(error ?? new Error("Could not connect to the call signalling channel."));
+    meteredPeerRef.current = meteredPeer;
+    meteredPeer.on("peer-joined", ({ peer: remote }) => {
+      remote.on("stream-added", ({ stream }) => {
+        remoteStreamRef.current = stream;
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          void remoteVideoRef.current.play().catch(() => undefined);
+        }
+        setCallStatus("Call connected");
+      });
+      remote.on("stream-removed", ({ stream }) => {
+        if (remoteStreamRef.current?.id === stream.id) {
+          remoteStreamRef.current = null;
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+        }
+      });
+      remote.on("state-change", ({ to }) => {
+        if (to === "connected") setCallStatus("Call connected");
+        else if (to === "connecting") setCallStatus("Connecting media…");
       });
     });
-    let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];
-    try {
-      const configResponse = await fetch("/api/calls/ice-config", { cache: "no-store" });
-      if (configResponse.ok) { const config = await configResponse.json() as { iceServers?: RTCIceServer[] }; if (Array.isArray(config.iceServers) && config.iceServers.length) iceServers = config.iceServers; }
-    } catch { /* STUN remains as fallback until TURN is configured. */ }
-    const peer = new RTCPeerConnection({ iceServers });
-    peerRef.current = peer;
-    remoteStreamRef.current = new MediaStream();
-    peer.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => remoteStreamRef.current?.addTrack(track));
-      if (remoteVideoRef.current && remoteStreamRef.current) remoteVideoRef.current.srcObject = remoteStreamRef.current;
-      setCallStatus("Call connected");
-    };
-    peer.onicecandidate = (event) => { if (event.candidate) void sendSignal("ice", event.candidate.toJSON()); };
-    peer.onconnectionstatechange = () => {
-      if (peer.connectionState === "connected") setCallStatus("Call connected");
-      if (peer.connectionState === "failed") setCallStatus("Connection failed. A TURN relay may be required on this network.");
-      if (peer.connectionState === "disconnected") setCallStatus("Call temporarily disconnected");
-    };
-    streamRef.current.getTracks().forEach((track) => peer.addTrack(track, streamRef.current as MediaStream));
+    meteredPeer.on("peer-left", () => {
+      remoteStreamRef.current = null;
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      setCallStatus("The other participant left the call.");
+    });
+    meteredPeer.on("state-change", ({ to }) => {
+      if (to === "reconnecting") setCallStatus("Reconnecting call…");
+      else if (to === "joined" && !remoteStreamRef.current) setCallStatus(host ? "Waiting for invited participant…" : "Waiting for host media…");
+    });
+    meteredPeer.on("error", ({ err }) => {
+      setCallError(err.message || "The secure call connection encountered an error.");
+      setCallStatus("Call connection error");
+    });
+    // Add the local webcam stream before joining so the SDK can negotiate it
+    // during initial peer discovery, and automatically recover it after reconnects.
+    meteredPeer.addStream(localStream, { role: "camera", label: "VEYRA live avatar" });
     setInCall(true);
-    setCallStatus(host ? "Waiting for invited participant…" : "Joining call…");
-    await sendSignal("ready");
+    await meteredPeer.join("veyra-call-" + roomId);
   }
 
   async function createCall() {
@@ -446,7 +429,6 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
   }
 
   async function endCall() {
-    await sendSignal("hangup");
     await closeCall(true);
   }
 
@@ -488,7 +470,7 @@ export default function LiveCallStudio({ signedIn }: { signedIn: boolean }) {
           <div className="live-call-block"><label className="live-call-label">OBS / streaming output</label><div className="camera-permission-row"><span className="camera-icon"><MonitorUp size={18}/></span><span><strong>Canvas capture stream</strong><small>30 FPS browser stream for OBS capture.</small></span><button type="button" className={obsOn ? "camera-toggle on" : "camera-toggle"} onClick={() => obsOn ? stopObsOutput() : void startObsOutput()}>{obsOn ? "Stop" : "Start"}</button></div><video ref={obsVideoRef} muted playsInline autoPlay style={{width:"100%",maxHeight:100,background:"#080a10",borderRadius:8}}/><p className="live-call-hint">{obsMessage}</p></div>
         </div>
       </div>
-      <div className="live-call-footnote">Calls use encrypted WebRTC media and private Supabase Realtime signalling. Invite links are single-guest bearer links that expire after 24 hours; both people must sign in. STUN is configured; some restrictive networks require a TURN relay, which has not been configured. OBS virtual-camera drivers cannot be installed by a website: use OBS Browser Source or Window Capture, then enable OBS Virtual Camera in the OBS desktop app.</div>
+      <div className="live-call-footnote">Calls use encrypted WebRTC media with Metered Realtime Messaging for private, room-scoped signalling and Metered TURN relay credentials when Auto-inject TURN is enabled. Invite links are single-guest bearer links that expire after 24 hours; both people must sign in. OBS virtual-camera drivers cannot be installed by a website: use OBS Browser Source or Window Capture, then enable OBS Virtual Camera in the OBS desktop app.</div>
     </section>
   );
 }
