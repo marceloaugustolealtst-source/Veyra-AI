@@ -12,7 +12,7 @@ export default function OpenGraphImage() {
         <div style={{ width: "62px", height: "62px", borderRadius: "18px", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg,#c2a8ff,#5142b3)", fontSize: "40px", fontWeight: 800 }}>V</div>
         <div style={{ display: "flex", flexDirection: "column", fontSize: "26px", fontWeight: 800, letterSpacing: "5px" }}>VEYRA AI<span style={{ color: "#b7a0ff", fontSize: "12px", letterSpacing: "4px", marginTop: "5px" }}>CREATIVE STUDIO</span></div>
       </div>
-      <div style={{ fontSize: "64px", lineHeight: 1.08, fontWeight: 700, maxWidth: "900px", letterSpacing: "-2px" }}>Imagine it.<br/>Bring it to life.</div>
+      <div style={{ display: "flex", flexDirection: "column", fontSize: "64px", lineHeight: 1.08, fontWeight: 700, maxWidth: "900px", letterSpacing: "-2px" }}><span>Imagine it.</span><span>Bring it to life.</span></div>
       <div style={{ display: "flex", marginTop: "34px", fontSize: "22px", color: "#b9b4c9" }}>AI images · Photo editing · Cinematic video</div>
       <div style={{ display: "flex", position: "absolute", right: "88px", bottom: "60px", color: "#9f8bda", fontSize: "16px" }}>VEYRA AI</div>
     </div>,
