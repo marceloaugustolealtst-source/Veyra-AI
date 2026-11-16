@@ -132,6 +132,21 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     if (file && mode === "image_to_video" && (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024)) {
       setMessage("Choose a PNG, JPG or WebP image up to 20 MB."); return;
     }
+    if (file && mode === "image_to_video") {
+      try {
+        const bitmap = await createImageBitmap(file);
+        const aspect = bitmap.width / bitmap.height;
+        const validDimensions = bitmap.width >= 300 && bitmap.height >= 300 && aspect >= 0.4 && aspect <= 2.5;
+        bitmap.close();
+        if (!validDimensions) {
+          setMessage("For realistic image-to-video, use an image at least 300 × 300 pixels with an aspect ratio between 0.4 and 2.5.");
+          return;
+        }
+      } catch {
+        setMessage("The selected image could not be read. Please choose a valid PNG, JPG or WebP image.");
+        return;
+      }
+    }
 
     setBusy(true);
     try {
