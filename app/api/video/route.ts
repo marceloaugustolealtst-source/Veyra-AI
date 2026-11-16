@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       prompt,
       "Generate synchronized native audio with realistic speech and natural lip movement where a person is speaking.",
       voiceDirection[voiceStyle],
-      dialogue ? "The character must say exactly: " + dialogue.replaceAll('"', "'") : "If the scene calls for speech, include a short natural spoken line; otherwise use fitting environmental audio.",
+      dialogue ? "The character must say exactly: " + dialogue.replaceAll('"', "'") : "Have the visible person speak one short, natural sentence that fits the scene, with synchronized lip movement and clear audible speech.",
       "Do not add subtitles, captions, or on-screen text unless explicitly requested.",
     ].join("\n\n");
     const payload: Record<string, unknown> = { model, promptText: audioPrompt };
