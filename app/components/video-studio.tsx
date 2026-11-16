@@ -7,7 +7,9 @@ import { createClient } from "@/lib/supabase/client";
 type VideoMode = "text_to_video" | "image_to_video" | "video_edit";
 
 export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsChange: (credits: number) => void; onCreated: (creation: { id: string; generationId: string | null; createdAt: string; mediaType: "video"; mediaUrl: string }) => void }) {
-  const [mode, setMode] = useState<VideoMode>("text_to_video");
+  const [mode, setMode] = useState<VideoMode>("image_to_video");
+  const [engine, setEngine] = useState<"cloud" | "local">("local");
+  const [localReady, setLocalReady] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(5);
   const [ratio, setRatio] = useState("landscape");
@@ -28,7 +30,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     return () => URL.revokeObjectURL(url);
   }, [file, mode]);
 
-  function changeMode(next: VideoMode) {
+  async function checkLocalEngine() {\n    try {\n      const response = await fetch("http://127.0.0.1:8765/health", { cache: "no-store" });\n      const health = await response.json() as { ok?: boolean; device?: string };\n      setLocalReady(Boolean(response.ok && health.ok && health.device !== "cpu"));\n      return Boolean(response.ok && health.ok && health.device !== "cpu");\n    } catch { setLocalReady(false); return false; }\n  }\n\n  function changeMode(next: VideoMode) {
     setMode(next);
     setFile(null);
     setPreview("");
@@ -193,14 +195,14 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     <section className="video-studio" id="video-studio">
       <div className="section-head video-section-head">
         <div><h2>AI video studio</h2><p>Create cinematic clips from text and images, or transform an existing video.</p></div>
-        <span className="editor-badge"><Film size={12}/> RUNWAY AI</span>
+        <span className="editor-badge"><Film size={12}/> {engine === "local" ? "LOCAL GPU · FREE" : "RUNWAY AI"}</span>
       </div>
-      <div className="video-mode-tabs" role="tablist" aria-label="Video creation mode">
-        <button type="button" className={mode === "text_to_video" ? "selected" : ""} onClick={() => changeMode("text_to_video")}><Sparkles size={14}/> Text to video</button>
+      <div className="video-mode-tabs" role="tablist" aria-label="Video creation mode">\n        <button type="button" className={engine === "local" ? "selected" : ""} onClick={() => { setEngine("local"); changeMode("image_to_video"); }}>Free local engine</button>\n        <button type="button" className={engine === "cloud" ? "selected" : ""} onClick={() => setEngine("cloud")}>Cloud generation</button>
+        {engine === "cloud" && <button type="button" className={mode === "text_to_video" ? "selected" : ""} onClick={() => changeMode("text_to_video")}><Sparkles size={14}/> Text to video</button>}
         <button type="button" className={mode === "image_to_video" ? "selected" : ""} onClick={() => changeMode("image_to_video")}><ImagePlus size={14}/> Image to video</button>
-        <button type="button" className={mode === "video_edit" ? "selected" : ""} onClick={() => changeMode("video_edit")}><Clapperboard size={14}/> Video editor</button>
+        {engine === "cloud" && <button type="button" className={mode === "video_edit" ? "selected" : ""} onClick={() => changeMode("video_edit")}><Clapperboard size={14}/> Video editor</button>}
       </div>
-      <div className="video-workspace">
+      <div className="video-workspace">\n        {engine === "local" && <p className="generation-message">Free local preview: requires the VEYRA Local Engine and a supported GPU. First launch downloads the model. Local clips are currently 2–5 seconds, silent, and downloaded to your device.</p>}
         <div className="video-controls">
           <label className="editor-label" htmlFor="video-prompt">{editing ? "Describe your video edit" : "Describe your video"}</label>
           <textarea id="video-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={1000} placeholder={editing ? "e.g. Change the scene to a golden-hour beach while keeping the subject and camera movement…" : "e.g. A cinematic tracking shot of a futuristic city at dusk, glowing reflections, atmospheric camera movement…"}/>
@@ -209,7 +211,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
             <input type="file" accept={editing ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
           </label>}
           {!editing && <>
-            <label className="editor-label" htmlFor="video-dialogue">Spoken dialogue (optional)</label>
+            {engine === "cloud" && <><label className="editor-label" htmlFor="video-dialogue">Spoken dialogue (optional)</label>
             <textarea id="video-dialogue" value={dialogue} onChange={(event) => setDialogue(event.target.value.slice(0, 500))} maxLength={500} placeholder="Write the exact words you want the person to say. Leave blank for natural scene audio."/>
             <label className="editor-label" htmlFor="video-voice">Voice style</label>
             <select id="video-voice" value={voiceStyle} onChange={(event) => setVoiceStyle(event.target.value)} style={{width:"100%",padding:"10px",border:"1px solid var(--line)",borderRadius:8,background:"#151720",color:"#dedce8",fontSize:11}}>
@@ -223,15 +225,15 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
             <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{Array.from({ length: 28 }, (_, index) => index + 3).map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
             <label>Aspect ratio<select value={ratio} onChange={(event) => setRatio(event.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></label>
           </div>
-          <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : `Create video · ${cost} free credits`}</button>
+          <button type="button" className="generate-btn video-generate" disabled={busy || prompt.trim().length < 3} onClick={start}><Video size={15}/>{busy ? "Processing video…" : engine === "local" ? "Generate free on this device" : `Create video · ${cost} free credits`}</button>
           {status && <p className="generation-message" role="status">{status}</p>}
           {message && <p className="generation-message" role="status">{message}</p>}
         </div>
         <div className="video-preview">
-          {videoUrl ? <video src={videoUrl} controls playsInline /> : <div className="video-preview-empty">{busy ? <LoaderCircle size={28} className="video-spinner"/> : <Clapperboard size={30}/>}<strong>{busy ? "Creating your video" : "Your video preview"}</strong><span>{busy ? "Veyra is working on your creative direction." : "Your finished video will appear here."}</span></div>}
+          {videoUrl ? <><video src={videoUrl} controls playsInline />{engine === "local" && <a className="generate-btn" href={videoUrl} download="veyra-local-video.mp4">Download MP4</a>}</> : <div className="video-preview-empty">{busy ? <LoaderCircle size={28} className="video-spinner"/> : <Clapperboard size={30}/>}<strong>{busy ? "Creating your video" : "Your video preview"}</strong><span>{busy ? "Veyra is working on your creative direction." : "Your finished video will appear here."}</span></div>}
         </div>
       </div>
-      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> Powered by Runway Kling 4.0 with generated audio. Add dialogue and choose a voice style for synchronized speech. Video generation uses 10 Veyra credits per 30 seconds.</p>
+      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> {engine === "local" ? "Local generation uses your own computer. No paid provider API or Veyra credits are used." : "Powered by Runway Kling 4.0 with generated audio. Add dialogue and choose a voice style for synchronized speech. Video generation uses 10 Veyra credits per 30 seconds."}</p>
     </section>
   );
 }
