@@ -11,6 +11,8 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(5);
   const [ratio, setRatio] = useState("landscape");
+  const [voiceStyle, setVoiceStyle] = useState("match_character");
+  const [dialogue, setDialogue] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
@@ -147,7 +149,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
       const response = await fetch("/api/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim(), mode, duration, ratio, mediaPath }),
+        body: JSON.stringify({ prompt: prompt.trim(), mode, duration, ratio, mediaPath, voiceStyle, dialogue }),
       });
       const data = await response.json() as { error?: string; generationId?: string; creditsReserved?: number };
       if (!response.ok || !data.generationId) throw new Error(data.error || "The video task could not be started.");
@@ -191,6 +193,17 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
             {preview ? <img src={preview} alt="Video starting frame"/> : <span><Upload size={20}/><strong>{file ? file.name : editing ? "Upload a source video" : "Upload a starting image"}</strong><small>{editing ? "MP4 or WebM · up to 100 MB · max 30 seconds" : "PNG, JPG or WebP · up to 20 MB"}</small></span>}
             <input type="file" accept={editing ? "video/mp4,video/webm" : "image/png,image/jpeg,image/webp"} onChange={handleFile} hidden/>
           </label>}
+          {!editing && <>
+            <label className="editor-label" htmlFor="video-dialogue">Spoken dialogue (optional)</label>
+            <textarea id="video-dialogue" value={dialogue} onChange={(event) => setDialogue(event.target.value.slice(0, 500))} maxLength={500} placeholder="Write the exact words you want the person to say. Leave blank for natural scene audio."/>
+            <label className="editor-label" htmlFor="video-voice">Voice style</label>
+            <select id="video-voice" value={voiceStyle} onChange={(event) => setVoiceStyle(event.target.value)} style={{width:"100%",padding:"10px",border:"1px solid var(--line)",borderRadius:8,background:"#151720",color:"#dedce8",fontSize:11}}>
+              <option value="match_character">Match the visible character</option>
+              <option value="female">Female-sounding voice</option>
+              <option value="male">Male-sounding voice</option>
+              <option value="neutral">Gender-neutral voice</option>
+            </select>
+          </>}
           <div className="editor-selects">
             <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{Array.from({ length: 28 }, (_, index) => index + 3).map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
             <label>Aspect ratio<select value={ratio} onChange={(event) => setRatio(event.target.value)}><option value="landscape">Landscape · 16:9</option><option value="portrait">Portrait · 9:16</option><option value="square">Square · 1:1</option></select></label>
@@ -203,7 +216,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
           {videoUrl ? <video src={videoUrl} controls playsInline /> : <div className="video-preview-empty">{busy ? <LoaderCircle size={28} className="video-spinner"/> : <Clapperboard size={30}/>}<strong>{busy ? "Creating your video" : "Your video preview"}</strong><span>{busy ? "Veyra is working on your creative direction." : "Your finished video will appear here."}</span></div>}
         </div>
       </div>
-      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> Powered by Runway. Initial models: Kling 4.0 for creation and Aleph 2.0 for video editing. Video generation uses 10 free credits per 30 seconds.</p>
+      <p className="notice"><Video size={12} style={{display:"inline",verticalAlign:"-2px"}}/> Powered by Runway Kling 4.0 with generated audio. Add dialogue and choose a voice style for synchronized speech. Video generation uses 10 Veyra credits per 30 seconds.</p>
     </section>
   );
 }
