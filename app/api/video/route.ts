@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       male: "Use a natural adult male-sounding voice, warm and realistic, with clear pronunciation.",
       neutral: "Use a natural, calm, gender-neutral voice with clear pronunciation.",
     };
-    const audioPrompt = [
+    const audioPrompt = edit ? prompt : [
       prompt,
       "Generate synchronized native audio with realistic speech and natural lip movement where a person is speaking.",
       voiceDirection[voiceStyle],
