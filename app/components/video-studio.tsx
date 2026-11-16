@@ -30,7 +30,16 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
     return () => URL.revokeObjectURL(url);
   }, [file, mode]);
 
-  async function checkLocalEngine() {\n    try {\n      const response = await fetch("http://127.0.0.1:8765/health", { cache: "no-store" });\n      const health = await response.json() as { ok?: boolean; device?: string };\n      setLocalReady(Boolean(response.ok && health.ok && health.device !== "cpu"));\n      return Boolean(response.ok && health.ok && health.device !== "cpu");\n    } catch { setLocalReady(false); return false; }\n  }\n\n  function changeMode(next: VideoMode) {
+  async function checkLocalEngine() {
+    try {
+      const response = await fetch("http://127.0.0.1:8765/health", { cache: "no-store" });
+      const health = await response.json() as { ok?: boolean; device?: string };
+      setLocalReady(Boolean(response.ok && health.ok && health.device !== "cpu"));
+      return Boolean(response.ok && health.ok && health.device !== "cpu");
+    } catch { setLocalReady(false); return false; }
+  }
+
+  function changeMode(next: VideoMode) {
     setMode(next);
     setFile(null);
     setPreview("");
@@ -197,12 +206,15 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
         <div><h2>AI video studio</h2><p>Create cinematic clips from text and images, or transform an existing video.</p></div>
         <span className="editor-badge"><Film size={12}/> {engine === "local" ? "LOCAL GPU · FREE" : "RUNWAY AI"}</span>
       </div>
-      <div className="video-mode-tabs" role="tablist" aria-label="Video creation mode">\n        <button type="button" className={engine === "local" ? "selected" : ""} onClick={() => { setEngine("local"); changeMode("image_to_video"); }}>Free local engine</button>\n        <button type="button" className={engine === "cloud" ? "selected" : ""} onClick={() => setEngine("cloud")}>Cloud generation</button>
+      <div className="video-mode-tabs" role="tablist" aria-label="Video creation mode">
+        <button type="button" className={engine === "local" ? "selected" : ""} onClick={() => { setEngine("local"); changeMode("image_to_video"); }}>Free local engine</button>
+        <button type="button" className={engine === "cloud" ? "selected" : ""} onClick={() => setEngine("cloud")}>Cloud generation</button>
         {engine === "cloud" && <button type="button" className={mode === "text_to_video" ? "selected" : ""} onClick={() => changeMode("text_to_video")}><Sparkles size={14}/> Text to video</button>}
         <button type="button" className={mode === "image_to_video" ? "selected" : ""} onClick={() => changeMode("image_to_video")}><ImagePlus size={14}/> Image to video</button>
         {engine === "cloud" && <button type="button" className={mode === "video_edit" ? "selected" : ""} onClick={() => changeMode("video_edit")}><Clapperboard size={14}/> Video editor</button>}
       </div>
-      <div className="video-workspace">\n        {engine === "local" && <p className="generation-message">Free local preview: requires the VEYRA Local Engine and a supported GPU. First launch downloads the model. Local clips are currently 2–5 seconds, silent, and downloaded to your device.</p>}
+      <div className="video-workspace">
+        {engine === "local" && <p className="generation-message">Free local preview: requires the VEYRA Local Engine and a supported GPU. First launch downloads the model. Local clips are currently 2–5 seconds, silent, and downloaded to your device.</p>}
         <div className="video-controls">
           <label className="editor-label" htmlFor="video-prompt">{editing ? "Describe your video edit" : "Describe your video"}</label>
           <textarea id="video-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={1000} placeholder={editing ? "e.g. Change the scene to a golden-hour beach while keeping the subject and camera movement…" : "e.g. A cinematic tracking shot of a futuristic city at dusk, glowing reflections, atmospheric camera movement…"}/>
@@ -220,6 +232,7 @@ export default function VideoStudio({ onCreditsChange, onCreated }: { onCreditsC
               <option value="male">Male-sounding voice</option>
               <option value="neutral">Gender-neutral voice</option>
             </select>
+          </>}
           </>}
           <div className="editor-selects">
             <label>{editing ? "Detected source length" : "Duration"}<select value={duration} disabled={editing && !!file} onChange={(event) => setDuration(Number(event.target.value))}>{Array.from({ length: 28 }, (_, index) => index + 3).map((seconds) => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label>
